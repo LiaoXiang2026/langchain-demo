@@ -39,16 +39,16 @@ class Agent:
         })
         return response["messages"][-1].content
 
-    def chat_stream(self, message: str):
-        """流式对话"""
-        for chunk in self.agent.stream({
+    async def chat_stream(self, message: str):
+        """流式对话（逐 token 输出）"""
+        async for event in self.agent.astream_events({
             "messages": [
                 SystemMessage(content=SYSTEM_PROMPT),
                 HumanMessage(content=message),
             ]
-        }):
-            if "agent" in chunk:
-                content = chunk["agent"]["messages"][-1].content
+        }, version="v2"):
+            if event["event"] == "on_chat_model_stream":
+                content = event["data"]["chunk"].content
                 if content:
                     yield content
 
