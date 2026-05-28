@@ -16,20 +16,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-uv run main.py          # 启动交互式 Agent
-uv sync                 # 安装/同步依赖
+uv run backend/main.py    # 启动交互式 Agent（CLI）
+uv run backend/server.py  # 启动 FastAPI 服务（Web）
+uv sync                   # 安装/同步依赖
 ```
 
 ## Architecture
 
 ```
-main.py                 # 入口：创建 Agent，启动 REPL 循环
-src/
-  config/settings.py    # Settings dataclass，从 .env 读取配置
-  agent/agent.py        # Agent 类：封装 LLM + tools，提供 chat/chat_stream；build_agent() 工厂函数
-  tools/
-    calculator.py       # @tool 计算器（eval 表达式）
-    search.py           # @tool 搜索（TODO：未接入真实 API）
+backend/
+  main.py                 # CLI 入口：创建 Agent，启动 REPL 循环
+  server.py               # FastAPI 服务：提供 /chat、/health、/ 接口
+  src/
+    config/settings.py    # Settings dataclass，从 .env 读取配置
+    agent/agent.py        # Agent 类：封装 LLM + tools，提供 chat/chat_stream；build_agent() 工厂函数
+    tools/
+      calculator.py       # @tool 计算器（eval 表达式）
+      search.py           # @tool 搜索（TODO：未接入真实 API）
+frontend/
+  index.html              # 聊天页面，调用 /chat 接口
 ```
 
 - `Agent.chat()` 单轮对话，`Agent.chat_stream()` 流式输出
@@ -39,5 +44,5 @@ src/
 ## Conventions
 
 - 中文注释和文档字符串
-- `src/` 下按功能分包（config、agent、tools），每个包有 `__init__.py` 导出公共接口
+- `backend/src/` 下按功能分包（config、agent、tools），每个包有 `__init__.py` 导出公共接口
 - 配置集中在 `Settings` dataclass，环境变量优先于默认值
