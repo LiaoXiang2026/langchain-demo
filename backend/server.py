@@ -93,7 +93,7 @@ async def knowledge_upload(file: UploadFile = File(...)):
             detail=f"不支持的文件格式: {ext}。支持: {', '.join(sorted(ALLOWED_EXTENSIONS))}",
         )
 
-    upload_path = Path(settings.upload_dir) / file.filename
+    upload_path = Path(settings.upload_dir) / (file.filename or "upload")
     with open(upload_path, "wb") as f:
         shutil.copyfileobj(file.file, f)
 
