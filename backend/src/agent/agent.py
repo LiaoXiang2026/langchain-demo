@@ -33,29 +33,40 @@ class Agent:
         )
         self.tools = [calculator, search, knowledge_search]
         self.agent = create_agent(self.llm, self.tools)  # type: ignore[call-arg]
+        self.history: list = []
+
+    def _build_messages(self, message: str) -> list:
+        """构建包含历史的消息列表"""
+        self.history.append(HumanMessage(content=message))
+        return [SystemMessage(content=SYSTEM_PROMPT)] + self.history
 
     def chat(self, message: str) -> str:
-        """单轮对话"""
-        response = self.agent.invoke({
-            "messages": [
-                SystemMessage(content=SYSTEM_PROMPT),
-                HumanMessage(content=message),
-            ]
-        })
+        """多轮对话"""
+        messages = self._build_messages(message)
+        response = self.agent.invoke({"messages": messages})
+        # 保存助手回复到历史
+        self.history.append(response["messages"][-1])
         return response["messages"][-1].content
 
     async def chat_stream(self, message: str):
         """流式对话（逐 token 输出）"""
-        async for event in self.agent.astream_events({
-            "messages": [
-                SystemMessage(content=SYSTEM_PROMPT),
-                HumanMessage(content=message),
-            ]
-        }, version="v2"):
+        messages = self._build_messages(message)
+        full_response = ""
+        async for event in self.agent.astream_events({"messages": messages}, version="v2"):
             if event["event"] == "on_chat_model_stream":
-                content = event["data"]["chunk"].content
-                if content:
-                    yield content
+                chunk = event["data"].get("chunk")
+                if chunk:
+                    content = chunk.content
+                    if content:
+                        full_response += content
+                        yield content
+        # 流结束后保存完整回复到历史
+        from langchain_core.messages import AIMessage
+        self.history.append(AIMessage(content=full_response))
+
+    def clear_history(self):
+        """清空对话历史"""
+        self.history.clear()
 
 
 def build_agent() -> Agent:
