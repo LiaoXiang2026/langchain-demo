@@ -20,8 +20,9 @@ def test_add_and_search():
         results = store.search("编程语言", k=1)
         assert len(results) == 1
         assert "Python" in results[0].page_content
+        store.close()
     finally:
-        shutil.rmtree(tmpdir)
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 def test_delete_by_filename():
@@ -39,8 +40,9 @@ def test_delete_by_filename():
         store.delete_by_filename("a.txt")
         results = store.search("内容", k=10)
         assert all("b.txt" == r.metadata["source"] for r in results)
+        store.close()
     finally:
-        shutil.rmtree(tmpdir)
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 def test_list_documents():
@@ -59,5 +61,6 @@ def test_list_documents():
         filenames = [d["filename"] for d in doc_list]
         assert "a.txt" in filenames
         assert "b.txt" in filenames
+        store.close()
     finally:
-        shutil.rmtree(tmpdir)
+        shutil.rmtree(tmpdir, ignore_errors=True)

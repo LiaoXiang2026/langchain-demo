@@ -24,5 +24,6 @@ def test_ingest_txt_file():
 
         results = pipeline.search("测试内容", k=1)
         assert len(results) > 0
+        pipeline._store.close()
     finally:
-        shutil.rmtree(tmpdir)
+        shutil.rmtree(tmpdir, ignore_errors=True)

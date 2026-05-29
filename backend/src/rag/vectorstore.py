@@ -16,6 +16,13 @@ class VectorStore:
             embedding_function=self._embeddings,
         )
 
+    def close(self) -> None:
+        """关闭 ChromaDB 连接，释放文件锁。"""
+        try:
+            self._store._client.close()  # type: ignore[attr-defined]
+        except Exception:
+            pass
+
     def add_documents(self, docs: list[Document], filename: str) -> int:
         """添加文档到向量存储，返回 chunk 数量。"""
         for i, doc in enumerate(docs):
