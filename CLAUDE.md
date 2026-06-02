@@ -11,7 +11,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 # 后端
 uv sync                       # 安装/同步 Python 依赖
-uv run python backend/main.py  # CLI 交互模式
 uv run python backend/server.py  # FastAPI 服务（端口 8000）
 uv run pytest tests/ -v        # 运行全部测试
 

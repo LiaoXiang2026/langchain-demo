@@ -1,4 +1,10 @@
-"""FastAPI 后端服务"""
+"""FastAPI 后端服务
+
+提供以下功能：
+- 聊天接口（同步单轮 + 流式输出）
+- 知识库管理（上传、列表、删除、检索）
+- 前端静态资源托管
+"""
 
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, UploadFile, File, HTTPException
@@ -15,20 +21,28 @@ from src.agent import Agent, build_agent
 from src.rag import DocumentPipeline
 from src.config import settings
 
+# 前端构建产物目录
 DIST_DIR = Path(__file__).parent.parent / "frontend" / "dist"
 
 
+# ========== 应用生命周期 ==========
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """启动时初始化 Agent 和管线，关闭时清理"""
+    """应用生命周期管理：启动时初始化资源，关闭时清理"""
+    # 启动时：创建 Agent 实例和文档处理管线
     app.state.agent = build_agent()
     app.state.pipeline = DocumentPipeline()
+    # 确保上传目录存在
     Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
     yield
+    # 关闭时：可在此处添加清理逻辑
 
 
+# 创建 FastAPI 应用实例，绑定生命周期
 app = FastAPI(title="AI Agent API", lifespan=lifespan)
 
+# CORS 中间件：允许前端跨域访问
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -37,8 +51,11 @@ app.add_middleware(
 )
 
 
+# ========== 中间件 ==========
+
 @app.middleware("http")
 async def log_request_time(request: Request, call_next):
+    """请求日志中间件：记录每个请求的方法、路径、状态码和耗时"""
     start = time.time()
     response = await call_next(request)
     ms = (time.time() - start) * 1000
@@ -46,30 +63,89 @@ async def log_request_time(request: Request, call_next):
     return response
 
 
+# ========== 请求/响应模型 ==========
+
 class ChatRequest(BaseModel):
+    """单轮对话请求体"""
     message: str
 
 
+class VercelMessagePart(BaseModel):
+    """AI SDK 消息部分（文本、图片等）"""
+    type: str
+    text: str | None = None
+
+
+class VercelMessage(BaseModel):
+    """AI SDK 消息格式（支持多轮对话）"""
+    role: str
+    parts: list[VercelMessagePart] = []
+
+
+class VercelChatRequest(BaseModel):
+    """AI SDK 聊天请求体"""
+    messages: list[VercelMessage]
+
+
+def _extract_latest_user_text(messages: list[VercelMessage]) -> str:
+    """从消息列表中提取最后一条用户消息的文本内容
+
+    Args:
+        messages: AI SDK 格式的消息列表
+
+    Returns:
+        最后一条用户消息的文本
+
+    Raises:
+        HTTPException: 未找到用户消息时抛出 400 错误
+    """
+    for message in reversed(messages):
+        if message.role != "user":
+            continue
+        # 提取所有文本类型的部分并拼接
+        text_parts = [part.text for part in message.parts if part.type == "text" and part.text]
+        text = "".join(text_parts).strip()
+        if text:
+            return text
+    raise HTTPException(status_code=400, detail="No user message found")
+
+
+# ========== 聊天接口 ==========
+
 @app.post("/chat")
 def chat(req: ChatRequest):
-    """单轮对话接口"""
+    """单轮对话接口（同步，等待完整回复后返回）"""
     agent: Agent = app.state.agent
+    # 调用 Agent 的同步聊天方法，阻塞直到生成完成
     response = agent.chat(req.message)
     return {"reply": response}
 
 
-@app.post("/chat/stream")
-async def chat_stream(req: ChatRequest):
-    """流式对话接口（SSE）"""
+@app.post("/api/chat")
+async def vercel_chat(req: VercelChatRequest):
+    """AI SDK 流式对话接口（SSE 协议）
+
+    使用 Vercel AI SDK 的 UI Message Stream Protocol：
+    - text-start: 文本开始
+    - text-delta: 文本增量（流式内容）
+    - text-end: 文本结束
+    - [DONE]: 流结束标记
+    """
     agent: Agent = app.state.agent
+    message = _extract_latest_user_text(req.messages)
 
     async def event_generator():
-        start = time.time()
-        async for chunk in agent.chat_stream(req.message):
-            yield f"data: {json.dumps({'content': chunk})}\n\n"
+        # 生成唯一的文本 ID
+        text_id = f"text-{int(time.time() * 1000)}"
+        # 发送 text-start 事件，标记文本开始
+        yield f"data: {json.dumps({'type': 'text-start', 'id': text_id})}\n\n"
+        # 流式发送文本增量，逐 token 输出
+        async for chunk in agent.chat_stream(message):
+            yield f"data: {json.dumps({'type': 'text-delta', 'id': text_id, 'delta': chunk})}\n\n"
+        # 发送 text-end 事件，标记文本结束
+        yield f"data: {json.dumps({'type': 'text-end', 'id': text_id})}\n\n"
+        # 发送 [DONE] 标记，通知前端流结束
         yield "data: [DONE]\n\n"
-        ms = (time.time() - start) * 1000
-        print(f"POST /chat/stream 完成 ({ms:.0f}ms)")
 
     return StreamingResponse(
         event_generator(),
@@ -80,12 +156,17 @@ async def chat_stream(req: ChatRequest):
 
 # ========== 知识库 API ==========
 
+# 允许上传的文件扩展名
 ALLOWED_EXTENSIONS = {".txt", ".md", ".pdf", ".docx", ".xlsx", ".xls"}
 
 
 @app.post("/knowledge/upload")
 async def knowledge_upload(file: UploadFile = File(...)):
-    """上传文档到知识库"""
+    """上传文档到知识库
+
+    流程：保存文件 → 加载 → 分块 → 嵌入 → 存入向量库
+    """
+    # 校验文件扩展名
     ext = Path(file.filename or "").suffix.lower()
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(
@@ -93,32 +174,36 @@ async def knowledge_upload(file: UploadFile = File(...)):
             detail=f"不支持的文件格式: {ext}。支持: {', '.join(sorted(ALLOWED_EXTENSIONS))}",
         )
 
+    # 保存上传文件到本地
     upload_path = Path(settings.upload_dir) / (file.filename or "upload")
     with open(upload_path, "wb") as f:
         shutil.copyfileobj(file.file, f)
 
+    # 调用文档处理管线进行向量化
     pipeline: DocumentPipeline = app.state.pipeline
     try:
         result = pipeline.ingest(str(upload_path))
         return result
     except Exception as e:
+        # 处理失败时删除已上传的文件
         upload_path.unlink(missing_ok=True)
         raise HTTPException(status_code=500, detail=f"文档处理失败: {e}")
 
 
 @app.get("/knowledge/list")
 async def knowledge_list():
-    """列出已入库文档"""
+    """列出已入库的所有文档"""
     pipeline: DocumentPipeline = app.state.pipeline
     return pipeline.list_documents()
 
 
 @app.delete("/knowledge/{filename}")
 async def knowledge_delete(filename: str):
-    """删除指定文档"""
+    """删除指定文档（同时删除向量库记录和本地文件）"""
     pipeline: DocumentPipeline = app.state.pipeline
+    # 从向量库中删除
     pipeline.delete(filename)
-
+    # 删除本地上传文件
     upload_path = Path(settings.upload_dir) / filename
     upload_path.unlink(missing_ok=True)
 
@@ -126,13 +211,17 @@ async def knowledge_delete(filename: str):
 
 
 class SearchRequest(BaseModel):
-    query: str
-    k: int = 4
+    """知识库检索请求体"""
+    query: str  # 检索查询文本
+    k: int = 4  # 返回结果数量
 
 
 @app.post("/knowledge/search")
 async def knowledge_search_api(req: SearchRequest):
-    """知识库检索（调试用）"""
+    """知识库检索接口（调试用）
+
+    直接检索向量库，返回最相似的文档片段
+    """
     pipeline: DocumentPipeline = app.state.pipeline
     results = pipeline.search(req.query, k=req.k)
     return [
@@ -145,25 +234,38 @@ async def knowledge_search_api(req: SearchRequest):
     ]
 
 
+# ========== 健康检查 ==========
+
 @app.get("/health")
 def health():
-    """健康检查"""
+    """健康检查接口，用于监控服务状态"""
     return {"status": "ok"}
 
 
-# 挂载前端静态资源
+# ========== 前端静态资源托管 ==========
+
+# 挂载前端构建产物（仅在 dist 目录存在时生效）
 if DIST_DIR.exists():
+    # 挂载静态资源目录（JS、CSS、图片等）
     app.mount("/assets", StaticFiles(directory=DIST_DIR / "assets"), name="assets")
 
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
-        """SPA 兜底：非 API 路径返回 index.html"""
+        """SPA 兜底路由：非 API 路径返回 index.html
+
+        这样前端路由（如 /chat、/knowledge）可以正常工作
+        """
         file_path = DIST_DIR / full_path
+        # 如果是真实文件（如 favicon.ico），直接返回
         if file_path.is_file():
             return FileResponse(file_path)
+        # 否则返回 index.html，由前端路由处理
         return FileResponse(DIST_DIR / "index.html")
 
 
+# ========== 启动入口 ==========
+
 if __name__ == "__main__":
     import uvicorn
+    # 启动开发服务器，监听所有网络接口，启用热重载
     uvicorn.run("server:app", host="0.0.0.0", port=8000, reload=True)

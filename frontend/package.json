@@ -10,8 +10,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@ai-sdk/react": "^3.0.195",
     "@ant-design/x": "^2.7.0",
     "@tailwindcss/vite": "^4.3.0",
+    "ai": "^6.0.193",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "tailwindcss": "^4.3.0"
