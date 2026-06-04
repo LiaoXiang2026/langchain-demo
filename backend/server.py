@@ -1,7 +1,7 @@
 """FastAPI 后端服务
 
 提供以下功能：
-- 聊天接口（同步单轮 + 流式输出）
+- 聊天接口（流式输出，AI SDK 协议）
 - 知识库管理（上传、列表、删除、检索）
 - 前端静态资源托管
 """
@@ -59,16 +59,11 @@ async def log_request_time(request: Request, call_next):
     start = time.time()
     response = await call_next(request)
     ms = (time.time() - start) * 1000
-    print(f"{request.method} {request.url.path} -> {response.status_code} ({ms:.0f}ms)")
+    print(f"__log__{request.method} {request.url.path} -> {response.status_code} ({ms:.0f}ms)")
     return response
 
 
 # ========== 请求/响应模型 ==========
-
-class ChatRequest(BaseModel):
-    """单轮对话请求体"""
-    message: str
-
 
 class VercelMessagePart(BaseModel):
     """AI SDK 消息部分（文本、图片等）"""
@@ -111,15 +106,6 @@ def _extract_latest_user_text(messages: list[VercelMessage]) -> str:
 
 
 # ========== 聊天接口 ==========
-
-@app.post("/chat")
-def chat(req: ChatRequest):
-    """单轮对话接口（同步，等待完整回复后返回）"""
-    agent: Agent = app.state.agent
-    # 调用 Agent 的同步聊天方法，阻塞直到生成完成
-    response = agent.chat(req.message)
-    return {"reply": response}
-
 
 @app.post("/api/chat")
 async def vercel_chat(req: VercelChatRequest):
