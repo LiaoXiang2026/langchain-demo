@@ -50,18 +50,18 @@ class Agent:
 
     async def chat_stream(self, message: str):
         """流式对话（逐 token 输出）"""
+        from langchain_core.messages import AIMessage
+
         messages = self._build_messages(message)
         full_response = ""
         async for event in self.agent.astream_events({"messages": messages}, version="v2"):
-            if event["event"] == "on_chat_model_stream":
-                chunk = event["data"].get("chunk")
-                if chunk:
-                    content = chunk.content
-                    if content:
-                        full_response += content
-                        yield content
-        # 流结束后保存完整回复到历史
-        from langchain_core.messages import AIMessage
+            if event["event"] != "on_chat_model_stream":
+                continue
+            content = event["data"].get("chunk", None) and event["data"]["chunk"].content
+            if not content:
+                continue
+            full_response += content
+            yield content
         self.history.append(AIMessage(content=full_response))
 
     def clear_history(self):

@@ -7,7 +7,7 @@
 """
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -20,6 +20,7 @@ import shutil
 from src.agent import Agent, build_agent
 from src.rag import DocumentPipeline
 from src.config import settings
+from param_guide import app as param_guide_app
 
 # 前端构建产物目录
 DIST_DIR = Path(__file__).parent.parent / "frontend" / "dist"
@@ -49,18 +50,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-# ========== 中间件 ==========
-
-@app.middleware("http")
-async def log_request_time(request: Request, call_next):
-    """请求日志中间件：记录每个请求的方法、路径、状态码和耗时"""
-    start = time.time()
-    response = await call_next(request)
-    ms = (time.time() - start) * 1000
-    print(f"__log__{request.method} {request.url.path} -> {response.status_code} ({ms:.0f}ms)")
-    return response
 
 
 # ========== 请求/响应模型 ==========
@@ -231,6 +220,8 @@ def health():
 # ========== 前端静态资源托管 ==========
 
 # 挂载前端构建产物（仅在 dist 目录存在时生效）
+app.mount("/param-guide", param_guide_app)
+
 if DIST_DIR.exists():
     # 挂载静态资源目录（JS、CSS、图片等）
     app.mount("/assets", StaticFiles(directory=DIST_DIR / "assets"), name="assets")
