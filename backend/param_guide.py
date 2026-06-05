@@ -10,7 +10,8 @@
 """
 
 from enum import Enum
-from typing import Annotated
+from typing import Annotated, AsyncIterable, Literal
+from fastapi.sse import EventSourceResponse
 
 from fastapi import (
     Body,
@@ -23,6 +24,7 @@ from fastapi import (
     Path,
     Query,
     UploadFile,
+    Cookie,
 )
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
@@ -41,13 +43,12 @@ app.add_middleware(
 # ==================== 一、GET 查询参数 (Query Parameters) ====================
 
 
-@app.get('/items/{bId}')
-def readItemById(bId: int):
+@app.get('/cookie-item')
+async def readItemById(bId: Annotated[str | None, Cookie()] = None):
     print(f"id是{bId}, 类型是{type(bId)}")
 
     return {
         'message': 'ok',
-        'success': True,
         'bId': bId
     }
 
@@ -286,6 +287,22 @@ async def upload_image(
         "size_kb": round(len(content) / 1024, 2),
     }
 
+class Item(BaseModel):
+    name: str
+    description: str | None
+
+
+items = [
+    Item(name="Plumbus", description="A multi-purpose household device."),
+    Item(name="Portal Gun", description="A portal opening device."),
+    Item(name="Meeseeks Box", description="A box that summons a Meeseeks."),
+]
+
+
+@app.get("/items/stream", response_class=EventSourceResponse)
+async def sse_items() -> AsyncIterable[Item]:
+    for item in items:
+        yield item
 
 # ==================== 六、请求头 (Headers) ====================
 
