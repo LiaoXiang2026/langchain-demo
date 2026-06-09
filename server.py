@@ -23,7 +23,7 @@ from src.config import settings
 from param_guide import app as param_guide_app
 
 # 前端构建产物目录
-DIST_DIR = Path(__file__).parent.parent / "frontend" / "dist"
+DIST_DIR = Path(__file__).parent / "frontend" / "dist"
 
 
 # ========== 应用生命周期 ==========
