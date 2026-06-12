@@ -24,8 +24,22 @@ class VectorStore:
             pass
 
     def add_documents(self, docs: list[Document], filename: str) -> int:
-        """添加文档到向量存储，返回 chunk 数量。"""
+        """添加文档到向量存储,返回 chunk 数量。
+
+        元数据继承与隔离(02-RESEARCH.md Threat T-02-10):
+          - 上游(cleaner / pipeline)会在 doc.metadata 里塞 content_hash/title/
+            author/publish_date/source_path 等字段,本函数必须**继承**这些字段
+            让 chunk 级别可被 ChromaDB where filter 查询(供 DEDUP 和后续 Agent
+            引用 metadata 标题)。
+          - 但 LangChain Document 默认 metadata 是 dict 引用,直接 `metadata["x"] = y`
+            会让多个 chunk 共享同一 dict 引用,导致 cross-contamination。本函数
+            显式 `doc.metadata = dict(doc.metadata)` 重建新 dict,杜绝污染。
+          - `source` 和 `chunk_id` 由本函数强制覆盖,避免上游传错或缺漏。
+        """
         for i, doc in enumerate(docs):
+            # 隔离 doc 自带 metadata:重建新 dict,防止多次 add_documents 调用间
+            # metadata 互相污染(上游传同一 dict 时尤其危险)
+            doc.metadata = dict(doc.metadata)
             doc.metadata["source"] = filename
             doc.metadata["chunk_id"] = i
         self._store.add_documents(docs)
