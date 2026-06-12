@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="gb18030">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>微前端架构思考 - 公众号文章</title>
+    <script>
+        var article_title = "微前端架构思考";
+        var nickname = "技术沉思录";
+        var create_time = "1701234567";
+        var msg_desc = "这是一篇关于微前端架构的深度文章。";
+        var author = "技术沉思录";
+    </script>
+    <style>
+        body { font-family: sans-serif; }
+        .qr_code { display: block; }
+        .related_area { margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <div class="profile_meta">
+        <span class="nickname">技术沉思录</span>
+        <span class="qr_code_img"><img src="qr.png" alt="二维码"></span>
+    </div>
+
+    <div id="js_content">
+        <h1>微前端架构思考</h1>
+        <h2>从单体到模块化的演进</h2>
+        <p>微前端是一种将前端应用分解为多个独立可部署模块的架构风格。在大型企业应用中，这种模式可以显著提升团队协作效率。</p>
+
+        <h3>核心原则</h3>
+        <p>独立部署、技术无关、团队自治是微前端的三大核心原则。</p>
+
+        <pre><code class="language-javascript">
+// 微前端配置示例
+const microApp = {
+  name: 'user-center',
+  entry: '//cdn.example.com/user-center/',
+  container: '#subapp-viewport',
+  activeRule: '/user',
+};
+
+registerMicroApp(microApp);
+        </code></pre>
+
+        <h4>技术选型</h4>
+        <p>常见的微前端方案包括 <a href="https://qiankun.umijs.org/" rel="noopener">qiankun</a>、<a href="https://micro-frontends.org/" rel="noopener">Micro Frontends</a> 等。也可以参考 <a href="https://martinfowler.com/articles/micro-frontends.html">Martin Fowler 的文章</a>。</p>
+
+        <h5>实现示例</h5>
+        <p>下图展示了微前端的整体架构：</p>
+        <p><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" alt="流程图"></p>
+        <p>通过子应用的方式，可以将不同的业务模块独立部署。</p>
+
+        <h6>注意事项</h6>
+        <ul>
+            <li>做好版本管理</li>
+            <li>避免样式冲突</li>
+            <li>考虑性能影响</li>
+        </ul>
+
+        <pre><code>
+// 主应用加载
+import { registerMicroApps, start } from 'qiankun';
+
+registerMicroApps([
+  { name: 'react-app', entry: '//localhost:7100', container: '#container', activeRule: '/react' },
+  { name: 'vue-app', entry: '//localhost:7200', container: '#container', activeRule: '/vue' },
+]);
+
+start();
+        </code></pre>
+
+        <p>微前端不是银弹，需要根据团队规模和业务复杂度谨慎选择。</p>
+    </div>
+
+    <div class="related_area">
+        <h3>推荐阅读</h3>
+        <ul>
+            <li>前端工程化演进</li>
+            <li>微服务在前端的实践</li>
+        </ul>
+    </div>
+
+    <div class="qr_code">
+        <p>长按识别二维码关注我们</p>
+        <img src="qr-code-base64-data-here" alt="公众号二维码">
+    </div>
+
+    <script>
+        var js_title = "微前端架构思考";
+        console.log("this is chrome script");
+    </script>
+
+    <noscript>请启用 JavaScript 以获得最佳体验。</noscript>
+
+    <iframe src="https://example.com/widget" width="0" height="0"></iframe>
+</body>
+</html>
