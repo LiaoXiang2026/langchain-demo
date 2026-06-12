@@ -20,7 +20,6 @@ import shutil
 from src.agent import Agent, build_agent
 from src.rag import DocumentPipeline
 from src.config import settings
-from param_guide import app as param_guide_app
 
 # 前端构建产物目录
 DIST_DIR = Path(__file__).parent / "frontend" / "dist"
@@ -229,8 +228,6 @@ def health():
 # ========== 前端静态资源托管 ==========
 
 # 挂载前端构建产物（仅在 dist 目录存在时生效）
-app.mount("/param-guide", param_guide_app)
-
 if DIST_DIR.exists():
     # 挂载静态资源目录（JS、CSS、图片等）
     app.mount("/assets", StaticFiles(directory=DIST_DIR / "assets"), name="assets")
