@@ -140,7 +140,7 @@ async def vercel_chat(req: VercelChatRequest):
 # ========== 知识库 API ==========
 
 # 允许上传的文件扩展名
-ALLOWED_EXTENSIONS = {".txt", ".md", ".pdf", ".docx", ".xlsx", ".xls"}
+ALLOWED_EXTENSIONS = {".md", ".pdf", ".html", ".htm"}
 
 
 @app.post("/knowledge/upload")

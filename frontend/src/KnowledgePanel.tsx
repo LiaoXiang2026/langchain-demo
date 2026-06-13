@@ -11,7 +11,7 @@ interface SearchResult {
   chunk_id: number
 }
 
-const ALLOWED_FORMATS = '.txt,.md,.pdf,.docx,.xlsx,.xls'
+const ALLOWED_FORMATS = '.md,.pdf,.html,.htm'
 
 function KnowledgePanel() {
   const [docs, setDocs] = useState<DocInfo[]>([])

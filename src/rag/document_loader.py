@@ -5,8 +5,6 @@ from langchain_core.documents import Document
 from langchain_community.document_loaders import (
     TextLoader,
     PyMuPDFLoader,
-    Docx2txtLoader,
-    UnstructuredExcelLoader,
 )
 from src.rag.cleaner import clean_wechat_html
 
@@ -35,12 +33,8 @@ class WeChatHTMLLoader:
 
 
 LOADER_MAP = {
-    ".txt": lambda path: TextLoader(path, encoding="utf-8"),
     ".md": lambda path: TextLoader(path, encoding="utf-8"),
     ".pdf": lambda path: PyMuPDFLoader(path),
-    ".docx": lambda path: Docx2txtLoader(path),
-    ".xlsx": lambda path: UnstructuredExcelLoader(path),
-    ".xls": lambda path: UnstructuredExcelLoader(path),
     ".html": WeChatHTMLLoader,
     ".htm": WeChatHTMLLoader,
 }

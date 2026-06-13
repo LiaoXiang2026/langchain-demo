@@ -6,21 +6,6 @@ import pytest
 from src.rag.document_loader import load_document
 
 
-def test_load_txt():
-    """测试加载纯文本文件"""
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8") as f:
-        f.write("这是第一段内容。\n\n这是第二段内容。")
-        f.flush()
-        path = f.name
-    try:
-        docs = load_document(path)
-        assert len(docs) > 0
-        assert "第一段" in docs[0].page_content
-        assert docs[0].metadata["source"] == path
-    finally:
-        os.unlink(path)
-
-
 def test_load_markdown():
     """测试加载 Markdown 文件"""
     with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8") as f:
