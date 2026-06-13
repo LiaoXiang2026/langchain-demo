@@ -13,9 +13,14 @@ def get_embeddings(model_name: str = "shibing624/text2vec-base-chinese") -> Hugg
     if Path(model_name).is_dir():
         return HuggingFaceEmbeddings(model_name=model_name)
 
-    # 尝试 HF 缓存目录
-    cache_path = Path.home() / ".cache" / "huggingface" / "hub" / f"models--{model_name.replace('/', '--')}"
-    if cache_path.is_dir():
-        return HuggingFaceEmbeddings(model_name=str(cache_path))
+    # 尝试 HF 缓存目录:hub/models--xxx/snapshots/<rev>/ 才是含 config.json 的真实模型目录,
+    # 外层 hub/models--xxx/ 只有 blobs/ 和 snapshots/ 子目录,直接传给 sentence-transformers 会报
+    # "Unrecognized model"。
+    hub_root = Path.home() / ".cache" / "huggingface" / "hub" / f"models--{model_name.replace('/', '--')}"
+    snapshots_dir = hub_root / "snapshots"
+    if snapshots_dir.is_dir():
+        revs = [p for p in snapshots_dir.iterdir() if p.is_dir()]
+        if revs:
+            return HuggingFaceEmbeddings(model_name=str(revs[0]))
 
     return HuggingFaceEmbeddings(model_name=model_name)
