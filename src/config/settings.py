@@ -10,10 +10,10 @@ load_dotenv()
 
 @dataclass
 class Settings:
-    # 小米模型配置
+    # LLM 配置(DeepSeek,OpenAI 兼容接口)
     api_key: str = ""
-    base_url: str = "https://token-plan-cn.xiaomimimo.com/v1"
-    model: str = "mimo-v2.5"
+    base_url: str = "https://api.deepseek.com/v1"
+    model: str = "deepseek-chat"
 
     # Agent 配置
     temperature: float = 0.7
@@ -28,7 +28,9 @@ class Settings:
     search_top_k: int = 4
 
     def __post_init__(self):
-        self.api_key = os.getenv("MIMO_API_KEY") or self.api_key
+        self.api_key = os.getenv("DEEPSEEK_API_KEY") or self.api_key
+        self.base_url = os.getenv("DEEPSEEK_BASE_URL") or self.base_url
+        self.model = os.getenv("MODEL_NAME") or self.model
         self.chroma_dir = os.getenv("CHROMA_DIR") or self.chroma_dir
         self.upload_dir = os.getenv("UPLOAD_DIR") or self.upload_dir
         self.embedding_model = os.getenv("EMBEDDING_MODEL") or self.embedding_model

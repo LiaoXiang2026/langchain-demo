@@ -25,7 +25,7 @@ cd frontend && npm install
 创建 `.env` 文件：
 
 ```
-MIMO_API_KEY=你的API密钥
+DEEPSEEK_API_KEY=你的API密钥
 ```
 
 ### 3. 启动
