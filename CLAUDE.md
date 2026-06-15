@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-基于 LangChain 的 AI Agent，支持工具调用（calculator、search）和 RAG 本地知识库问答。前端 (React) 通过 SSE 与后端 (FastAPI) 通信，Agent 自主决定是否调用 `knowledge_search` 检索本地文档回答问题。
+基于 LangChain 的 AI Agent，聚焦 RAG 本地知识库问答。前端 (React) 通过 SSE 与后端 (FastAPI) 通信，Agent 自主决定是否调用 `knowledge_search` 检索本地文档回答问题。
 
 LLM 通过 OpenAI 兼容协议接入（默认 DeepSeek）。嵌入模型 `shibing624/text2vec-base-chinese`，向量库 ChromaDB，文档分块针对中文标点调优。
 
@@ -32,8 +32,7 @@ npm run lint                             # ESLint
 **Agent 层** — `src/agent/agent.py`
 - `Agent` 类封装 LLM（`ChatOpenAI`，走 `base_url` 兼容 OpenAI 协议）+ 工具列表 + 多轮历史
 - `chat()` 单轮调用 `agent.invoke()`；`chat_stream()` 用 `agent.astream_events(version="v2")` 过滤 `on_chat_model_stream` 事件逐 token 输出
-- 工具通过 `@tool` 装饰器定义（`src/tools/calculator.py`、`search.py`、`knowledge.py`），注册到 `Agent.tools`
-- `search` 工具是占位（返回 `"搜索结果: {query}（需要接入搜索 API）"`），需要替换为真实实现
+- 工具通过 `@tool` 装饰器定义（`src/tools/knowledge.py`），注册到 `Agent.tools`，目前仅 `knowledge_search` 一个工具
 - `SYSTEM_PROMPT` 指导 Agent 优先使用 `knowledge_search` 回答文档相关问题，并要求引用来源文件名
 
 **RAG 层** — `src/rag/`

@@ -1,11 +1,10 @@
 # My App Py
 
-基于 LangChain 的 AI Agent，支持工具调用和 RAG 本地知识库问答。前端 (React) 通过 SSE 与后端 (FastAPI) 通信，Agent 自主决定是否调用 `knowledge_search` 检索本地文档回答问题。
+基于 LangChain 的 AI Agent，聚焦 RAG 本地知识库问答。前端 (React) 通过 SSE 与后端 (FastAPI) 通信，Agent 自主决定是否调用 `knowledge_search` 检索本地文档回答问题。
 
 ## 功能
 
 - 智能对话（SSE 流式输出，Vercel AI SDK 协议）
-- 工具调用：计算器（`simpleeval` 沙箱求值）、搜索（占位，待接入真实搜索 API）
 - **RAG 知识库**：上传本地文档构建知识库，Agent 自动检索并引用来源回答
 - **微信公众号 HTML 专项清洗**：编码自动检测（GBK/GB18030/UTF-8）、JS 元数据抽取、噪声剥离、base64 图片占位化
 - **内容去重**：基于清洗后正文 SHA256 的入库短路，重复文档不再走嵌入
@@ -85,8 +84,6 @@ src/
   agent/agent.py               # Agent 核心（LLM + tools + 多轮历史 + 流式输出）
   config/settings.py           # 配置管理（@dataclass + env 覆盖）
   tools/
-    calculator.py              # 计算器（@tool + simpleeval）
-    search.py                  # 搜索（占位）
     knowledge.py               # 知识库检索（@tool，Agent 按需调用）
   rag/
     document_loader.py         # LOADER_MAP 按扩展名分发加载器
@@ -133,4 +130,3 @@ uv run pytest tests/ -v
 
 - **Windows 平台**：删除 `data/chroma_db/` 前需先 `VectorStore.close()` 释放文件锁
 - **首次运行**：嵌入模型从 HuggingFace Hub 下载，模型会缓存在 `~/.cache/huggingface/hub/`；`src/rag/embeddings.py` 会自动解析 `snapshots/<rev>/` 子目录（直接传外层 cache 路径会触发 "Unrecognized model" 错误）
-- **`search` 工具**当前是占位实现，需要替换为 Tavily / SerpAPI 等真实搜索 API

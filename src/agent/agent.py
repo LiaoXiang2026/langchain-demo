@@ -5,14 +5,12 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain.agents import create_agent
 
 from src.config import settings
-from src.tools import calculator, search, knowledge_search
+from src.tools import knowledge_search
 
 
 SYSTEM_PROMPT = """你是一个有用的 AI 助手。
 
 你可以使用以下工具:
-- calculator: 计算数学表达式
-- search: 搜索互联网获取信息
 - knowledge_search: 搜索本地知识库，查找已上传文档中的相关内容
 
 当用户的问题可能与知识库中的文档相关时，优先使用 knowledge_search 工具检索。
@@ -31,7 +29,7 @@ class Agent:
             temperature=settings.temperature,
             max_tokens=settings.max_tokens,  # type: ignore[call-arg]
         )
-        self.tools = [calculator, search, knowledge_search]
+        self.tools = [knowledge_search]
         self.agent = create_agent(self.llm, self.tools)  # type: ignore[call-arg]
         self.history: list = []
 
