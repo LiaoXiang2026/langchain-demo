@@ -48,10 +48,10 @@ class DedupIndex:
             True 表示已存在(重复),False 表示未入库
         """
         # Pitfall 5:绝不能传 None,ChromaDB where filter 会异常
-        results = self._store._store.get(
+        # Cloud 模式下走 VectorStore.exists_by_metadata 公共接口(不再直接戳 _store)
+        return self._store.exists_by_metadata(
             where={"content_hash": content_hash}, limit=1
         )
-        return bool(results and results.get("ids"))
 
     @staticmethod
     def compute_hash(text: str) -> str:

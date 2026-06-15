@@ -6,9 +6,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      # ChromaDB 持久化（SQLite + 向量索引；切勿多容器共享）
-      - chroma-data:/app/data/chroma_db
-      # 用户上传的原始文件
+      # 用户上传的原始文件(本地落盘,供人工查阅)
       - uploads:/app/data/uploads
     env_file:
       - .env
@@ -18,20 +16,19 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      # 首次启动要加载嵌入模型，给宽裕点
-      start_period: 60s
+      # Chroma Cloud 模式下无需加载本地模型,启动极快
+      start_period: 20s
     logging:
       driver: json-file
       options:
         max-size: "10m"
         max-file: "3"
-    # 内存限制：946MB VPS 上必须严格控制
-    # 95MB 模型 + 100MB Python + 200MB ChromaDB + 100MB 系统 = ~500MB 稳态，700MB 留余量
+    # 内存限制：Chroma Cloud 模式下后端很轻（FastAPI + 一点 Python 运行时，~150-250MB 稳态）
+    # 946MB VPS 上保留 600MB headroom 以应对流量尖峰和 Cloud 端响应延迟时的 in-flight 请求
     deploy:
       resources:
         limits:
-          memory: 700M
+          memory: 600M
 
 volumes:
-  chroma-data:
   uploads:

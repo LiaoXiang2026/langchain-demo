@@ -25,18 +25,18 @@ from src.rag.vectorstore import VectorStore
 class DocumentPipeline:
     def __init__(
         self,
-        persist_dir: str | None = None,
-        embedding_model: str | None = None,
+        persist_dir: str | None = None,  # noqa: ARG002 - 兼容旧签名,Cloud 模式忽略
+        embedding_model: str | None = None,  # noqa: ARG002 - 兼容旧签名,Cloud 模式忽略
         chunk_size: int | None = None,
         chunk_overlap: int | None = None,
     ):
-        self.persist_dir = persist_dir or settings.chroma_dir
-        self.embedding_model = embedding_model or settings.embedding_model
+        # persist_dir / embedding_model 参数保留以兼容旧调用方,Cloud 模式下不使用
         self.chunk_size = chunk_size or settings.chunk_size
         self.chunk_overlap = chunk_overlap or settings.chunk_overlap
+        # Cloud 模式下 VectorStore 不再需要这两个参数,但保留签名兼容
         self._store = VectorStore(
-            persist_dir=self.persist_dir,
-            embedding_model=self.embedding_model,
+            persist_dir=persist_dir,
+            embedding_model=embedding_model,
         )
         self.dedup_index = DedupIndex(self._store)
 

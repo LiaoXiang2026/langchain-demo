@@ -1,13 +1,14 @@
 # My App Py
 
-基于 LangChain 的 AI Agent，聚焦 RAG 本地知识库问答。前端 (React) 通过 SSE 与后端 (FastAPI) 通信，Agent 自主决定是否调用 `knowledge_search` 检索本地文档回答问题。
+基于 LangChain 的 AI Agent，聚焦 RAG 知识库问答。前端 (React) 通过 SSE 与后端 (FastAPI) 通信，Agent 自主决定是否调用 `knowledge_search` 检索知识库文档回答问题。
 
 ## 功能
 
 - 智能对话（SSE 流式输出，Vercel AI SDK 协议）
 - **RAG 知识库**：上传本地文档构建知识库，Agent 自动检索并引用来源回答
-- **微信公众号 HTML 专项清洗**：编码自动检测（GBK/GB18030/UTF-8）、JS 元数据抽取、噪声剥离、base64 图片占位化
+- **Chroma Cloud 托管嵌入**：Qwen3-Embedding-0.6B dense 嵌入由 Cloud 端完成,本机零模型
 - **内容去重**：基于清洗后正文 SHA256 的入库短路，重复文档不再走嵌入
+- **微信公众号 HTML 专项清洗**：编码自动检测（GBK/GB18030/UTF-8）、JS 元数据抽取、噪声剥离、base64 图片占位化
 
 ## 快速开始
 
@@ -26,12 +27,18 @@ cd frontend && npm install
 在项目根目录创建 `.env`（参考 `.env.example`）：
 
 ```env
+# LLM
 DEEPSEEK_API_KEY=sk-你的密钥
 DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
 MODEL_NAME=deepseek-chat
-```
 
-可选变量：`CHROMA_DIR`（默认 `data/chroma_db`）、`UPLOAD_DIR`（默认 `data/uploads`）、`EMBEDDING_MODEL`（默认 `shibing624/text2vec-base-chinese`）。
+# Chroma Cloud
+CHROMA_HOST=europe-west1.gcp.trychroma.com
+CHROMA_TENANT=12e28eb4-2ece-483b-91b5-0cce2b3546e0
+CHROMA_DATABASE=RAG
+CHROMA_API_KEY=ck-你的密钥
+CHROMA_COLLECTION=knowledge_base
+```
 
 ### 3. 启动
 
@@ -89,8 +96,8 @@ src/
     document_loader.py         # LOADER_MAP 按扩展名分发加载器
     cleaner.py                 # 微信公众号 HTML 清洗器
     splitter.py                # 中文分块（RecursiveCharacterTextSplitter）
-    embeddings.py              # HuggingFace 嵌入（含 HF 缓存路径解析）
-    vectorstore.py             # ChromaDB 封装（CRUD + 搜索 + metadata 隔离）
+    embeddings_factory.py      # Chroma Cloud 托管嵌入函数（Qwen dense + Splade sparse）
+    vectorstore.py             # Chroma Cloud 封装（CloudClient + Schema + RRF + GroupBy）
     dedup.py                   # 基于 SHA256 的内容去重索引
     pipeline.py                # DocumentPipeline（ingest / ingest_cleaned / ingest_batch）
 frontend/
@@ -100,14 +107,13 @@ frontend/
     KnowledgePanel.tsx         # 知识库管理（上传 / 列表 / 搜索 / 删除）
   vite.config.ts               # 代理配置
 data/
-  chroma_db/                   # ChromaDB 持久化（运行时生成，.gitignore）
   uploads/                     # 用户上传的原始文件（运行时生成，.gitignore）
 tests/
   test_cleaner.py              # WeChat HTML 清洗
-  test_dedup.py                # SHA256 去重
+  test_dedup.py                # SHA256 去重（依赖 Chroma Cloud）
   test_document_loader.py      # 加载器分发
-  test_pipeline.py             # 管线端到端
-  test_vectorstore.py          # ChromaDB CRUD + 搜索
+  test_pipeline.py             # 管线端到端（依赖 Chroma Cloud）
+  test_vectorstore.py          # Chroma Cloud CRUD + 搜索
   fixtures/                    # wechat_sample.html (UTF-8) + wechat_sample_gbk.html (GBK)
 ```
 
@@ -117,8 +123,8 @@ tests/
 - **前端**：React 19 + TypeScript + Vite + Tailwind CSS v4（`@tailwindcss/vite` 插件）
 - **前端 AI 集成**：Vercel AI SDK v6（`@ai-sdk/react` + `ai`）+ Ant Design X v2
 - **LLM**：OpenAI 兼容接口（默认 DeepSeek `deepseek-chat`）
-- **嵌入模型**：`shibing624/text2vec-base-chinese`（HuggingFace，~400MB 首次下载）
-- **向量库**：ChromaDB 持久化到本地 `data/chroma_db/`
+- **向量库**：Chroma Cloud（Cloud 端持久化 + 托管嵌入）
+- **嵌入模型**：Chroma Cloud 托管的 Qwen3-Embedding-0.6B (dense),走 col.query() 单步检索
 
 ## 测试
 
@@ -128,5 +134,5 @@ uv run pytest tests/ -v
 
 ## 注意事项
 
-- **Windows 平台**：删除 `data/chroma_db/` 前需先 `VectorStore.close()` 释放文件锁
-- **首次运行**：嵌入模型从 HuggingFace Hub 下载，模型会缓存在 `~/.cache/huggingface/hub/`；`src/rag/embeddings.py` 会自动解析 `snapshots/<rev>/` 子目录（直接传外层 cache 路径会触发 "Unrecognized model" 错误）
+- **Chroma Cloud 必填**：`CHROMA_API_KEY` 是必填环境变量，启动时若缺失会报 `RuntimeError`
+- **Docker 镜像瘦身**：相比原本地嵌入栈,Cloud 模式不再需要 `libgomp1` / sentence-transformers / PyTorch / 本地模型烘焙,镜像显著减小

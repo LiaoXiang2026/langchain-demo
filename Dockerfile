@@ -12,12 +12,13 @@ RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debia
 # 系统依赖：
 #   build-essential       — 编译 lxml / pymupdf 等 C 扩展
 #   libxml2-dev libxslt1-dev — lxml 头文件
-#   libgomp1              — PyTorch / sentence-transformers 的 OpenMP
 #   curl                  — healthcheck 用
+#
+# 注意：不再需要 libgomp1（sentence-transformers 及其 PyTorch 依赖已删除），
+# 不再烘本地嵌入模型（Chroma Cloud 端托管 Qwen + Splade）。
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential \
         libxml2-dev libxslt1-dev \
-        libgomp1 \
         curl \
     && rm -rf /var/lib/apt/lists/*
 
@@ -30,28 +31,18 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev
 
-# 把嵌入模型烘进镜像，避免每次冷启动下载
-# HF_ENDPOINT 用国内镜像（hf-mirror.com），避开 huggingface.co 在国内的连接问题
-# 当前模型 BAAI/bge-small-zh-v1.5 (95MB)，与 src/config/settings.py 保持一致
-ENV HF_ENDPOINT=https://hf-mirror.com
-ENV HF_HOME=/root/.cache/huggingface
-RUN uv run python -c \
-        "from sentence_transformers import SentenceTransformer; \
-         SentenceTransformer('BAAI/bge-small-zh-v1.5')"
-
 # 拷源码（变化最频繁，放最后）
 COPY src ./src
 COPY server.py ./
 
-# 给 volume 挂载点占好位
-RUN mkdir -p data/chroma_db data/uploads
+# 给 volume 挂载点占好位（Cloud 模式下 chroma-data 不再需要，但保留兼容旧 docker-compose）
+RUN mkdir -p data/uploads
 
 EXPOSE 8000
 
-# 单 worker 是有意为之：
-#   1) 嵌入模型 400MB × N workers = 内存爆炸
-#   2) ChromaDB SQLite 后端不支持多进程并发写
-# 横向扩展：在 compose/K8s 里开多个容器实例，每个挂独立数据卷
+# Cloud 模式下：
+#   - 不再持有本地嵌入模型/向量索引,启动即连 Chroma Cloud
+#   - 多 worker 现在安全了（共享状态在 Cloud），但保留单 worker 配置以便复用旧 compose
 # --proxy-headers：让 uvicorn 信任反代的 X-Forwarded-* 头
 CMD ["uv", "run", "uvicorn", "server:app", \
      "--host", "0.0.0.0", "--port", "8000", \
