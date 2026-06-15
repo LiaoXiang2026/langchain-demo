@@ -22,7 +22,7 @@ class Settings:
     # RAG 配置
     chroma_dir: str = "data/chroma_db"
     upload_dir: str = "data/uploads"
-    embedding_model: str = "shibing624/text2vec-base-chinese"
+    embedding_model: str = "BAAI/bge-small-zh-v1.5"  # 95MB；如需更高质量改用 shibing624/text2vec-base-chinese (400MB)
     chunk_size: int = 500
     chunk_overlap: int = 50
     search_top_k: int = 4

@@ -1,0 +1,37 @@
+services:
+  backend:
+    build: .
+    image: myapp-backend:latest
+    container_name: myapp-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      # ChromaDB 持久化（SQLite + 向量索引；切勿多容器共享）
+      - chroma-data:/app/data/chroma_db
+      # 用户上传的原始文件
+      - uploads:/app/data/uploads
+    env_file:
+      - .env
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      # 首次启动要加载嵌入模型，给宽裕点
+      start_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # 内存限制：946MB VPS 上必须严格控制
+    # 95MB 模型 + 100MB Python + 200MB ChromaDB + 100MB 系统 = ~500MB 稳态，700MB 留余量
+    deploy:
+      resources:
+        limits:
+          memory: 700M
+
+volumes:
+  chroma-data:
+  uploads:
