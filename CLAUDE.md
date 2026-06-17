@@ -4,26 +4,28 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-基于 LangChain 的 AI Agent，聚焦 RAG 知识库问答。前端 (React) 通过 SSE 与后端 (FastAPI) 通信，Agent 自主决定是否调用 `knowledge_search` 检索知识库文档回答问题。
+基于 LangChain 的 AI Agent，聚焦 RAG 知识库问答。前端（React，独立项目仓库）通过 SSE 与后端（FastAPI）通信，Agent 自主决定是否调用 `knowledge_search` 检索知识库文档回答问题。
 
 LLM 通过 OpenAI 兼容协议接入（默认 DeepSeek）。**向量检索/嵌入走 Chroma Cloud 托管**（Qwen3-Embedding-0.6B dense），本机不再持嵌入模型/向量索引。文档分块针对中文标点调优。
+
+> 前端已剥离至独立项目（见 commit c0af3b3），本仓库只含后端。`server.py` 仍会在 `frontend/dist/` 存在时挂载其静态资源 + SPA 兜底路由，但本仓库不再持有前端源码。
 
 ## Commands
 
 ```bash
-# 后端
+# 后端（要求 Python >=3.14）
 uv sync                                  # 安装/同步 Python 依赖
 uv run python server.py                  # FastAPI 服务（端口 8000，启用 reload）
 uv run pytest tests/ -v                  # 运行全部测试
 uv run pytest tests/test_cleaner.py -v   # 跑单个测试文件
 
-# 前端
-cd frontend
-npm install                              # 安装前端依赖（脚本用 npm；存在 pnpm-lock.yaml 但 .gitignore 未排除）
-npm run dev                              # Vite 开发服务器（端口 5173，代理 /api /chat /knowledge /health → 8000）
-npm run build                            # tsc 类型检查 + Vite 构建到 frontend/dist
-npm run lint                             # ESLint
+# Docker 部署（生产）
+docker compose up -d --build             # 构建并启动 backend（端口 8000，env_file=.env）
+docker compose logs -f backend           # 跟随日志
+docker compose down                      # 停止
 ```
+
+配置从仓库根的 `.env` 读取（`settings.py` 调 `load_dotenv()`，环境变量优先于 dataclass 默认值）；参考 `.env.example`。
 
 ## Architecture
 
@@ -76,13 +78,9 @@ npm run lint                             # ESLint
 | `POST` | `/knowledge/search` | 直接检索（调试用）,请求体 `{"query": str, "k": int=4}` |
 | `GET` | `/health` | 健康检查 |
 
-### 前端（`frontend/src/`）
+### 前端
 
-- **栈**: React 19 + TypeScript + Vite + Tailwind CSS v4（`@tailwindcss/vite` 插件）+ **Vercel AI SDK** (`@ai-sdk/react` v3 + `ai` v6) + **Ant Design X** v2
-- **App.tsx**: Tab 切换聊天 / 知识库
-- **ChatPanel.tsx**: 调用 `useChat` 钩子处理 `/api/chat` SSE 流
-- **KnowledgePanel.tsx**: 上传 / 列表 / 搜索 / 删除知识库文档
-- **vite.config.ts**: 代理 `/api`、`/chat`、`/knowledge`、`/health` → `http://localhost:8000`
+前端为独立项目仓库，不在此处维护。后端契约约定：聊天走 `/api/chat`（Vercel AI SDK UI Message Stream Protocol，见上），知识库走 `/knowledge/*`。`/api/chat` 请求体为 AI SDK 格式 `{"messages": [{role, parts: [{type:"text", text}]}]}`，服务端只取最后一条 role=user 消息的文本。
 
 ### 数据目录
 
@@ -90,14 +88,20 @@ npm run lint                             # ESLint
 - 不再有 `data/chroma_db/`（Chroma Cloud 端持久化）
 - `data/` 在 `.gitignore` 中,运行期生成
 
+### 部署（Docker）
+
+- `Dockerfile`: 基于 `python:3.14-slim`，apt 源换阿里云镜像，装 `build-essential` + lxml 头文件（编译 C 扩展），用 `uv sync --frozen --no-dev` 装依赖，`uv run uvicorn server:app --workers 1 --proxy-headers` 启动。
+- `docker-compose.yml`: 单 `backend` 服务，`uploads` volume 持久化 `data/uploads`，`env_file: .env`，healthcheck 打 `/health`，内存上限 600M（适配 946M VPS）。
+- Cloud 模式下后端轻量（无本地模型），单 worker 配置保留以兼容旧 compose；多 worker 现在也安全（共享状态在 Cloud 端）。
+
 ### 测试（`tests/`）
 
 - `test_cleaner.py` — WeChat HTML 清洗（编码、JS 元数据、噪声剥离、img 占位）
 - `test_dedup.py` — SHA256 去重索引（依赖 Chroma Cloud,无 key 时失败）
 - `test_document_loader.py` — 加载器分发
-- `test_pipeline.py` — 管线端到端（依赖 Chroma Cloud,无 key 时失败）
-- `test_vectorstore.py` — Chroma Cloud CRUD + 搜索（依赖 Chroma Cloud,无 key 时失败）
 - `tests/fixtures/` — `wechat_sample.html` (UTF-8) + `wechat_sample_gbk.html` (GBK 编码,覆盖 chardet 边界 case)
+
+> 注:`test_pipeline.py` / `test_vectorstore.py` 已删除。它们在 Cloud 模式下会向生产 collection 写测试数据且不清理(污染知识库),依赖 Chroma Cloud 配额(Get limit 300 / ID 128B)又难以稳定断言。pipeline / vectorstore 的正确性现由 `test_cleaner` + 实际入库流程覆盖。
 
 ## Conventions
 

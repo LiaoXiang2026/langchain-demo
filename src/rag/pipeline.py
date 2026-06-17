@@ -85,9 +85,16 @@ class DocumentPipeline:
         }
         doc = Document(page_content=text, metadata=merged_meta)
         chunks = split_documents([doc], self.chunk_size, self.chunk_overlap)
-        # 文件名优先用 source_path 的 basename,fallback meta["source"],再 fallback "unknown"
+        # 文件名优先用 source_path 推导:
+        #   - index.html 这类通用名(微信存档形如 "2023-09-11 标题/index.html")无辨识度,
+        #     且多篇文章会撞名导致 Chroma id 冲突,改用父目录名(含日期+标题)
+        #   - 其余文件用 basename
         source_path = meta.get("source_path") or meta.get("source") or "unknown"
-        filename = Path(str(source_path)).name or "unknown"
+        p = Path(str(source_path))
+        if p.stem in ("index",) and p.parent.name:
+            filename = p.parent.name
+        else:
+            filename = p.name or "unknown"
         count = self._store.add_documents(chunks, filename=filename)
         return {
             "status": "new",

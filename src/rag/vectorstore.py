@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+import hashlib
+
 import chromadb
 from chromadb.utils.embedding_functions import ChromaCloudQwenEmbeddingFunction
 from chromadb.utils.embedding_functions.chroma_cloud_qwen_embedding_function import (
@@ -76,7 +78,13 @@ class VectorStore:
             meta = dict(doc.metadata)  # 隔离:防止引用污染
             meta["source"] = filename
             meta["chunk_id"] = i
-            ids.append(f"{filename}::chunk-{i}")
+            # id 前缀优先用 content_hash(dedup 流程注入),无则用 filename 的短 hash 兜底。
+            # 不能直接拿 filename 当 id 前缀:中文长标题 UTF-8 编码后易超 Chroma Cloud
+            # 的 ID 字节数配额(128B),导致 "ID size exceeded quota" 入库失败。
+            # 完整文件名仍保留在 metadata["source"] 供检索/列表/删除使用,不受 ID 限制。
+            ch = meta.get("content_hash")
+            id_prefix = ch if ch else hashlib.sha1(filename.encode("utf-8")).hexdigest()
+            ids.append(f"{id_prefix}::chunk-{i}")
             documents.append(doc.page_content)
             metadatas.append(meta)
 
@@ -102,10 +110,25 @@ class VectorStore:
         col.delete(where={"source": filename})
 
     def list_documents(self) -> list[dict]:
-        """列出已入库的文档(按 filename 聚合 chunk_count)。"""
+        """列出已入库的文档(按 filename 聚合 chunk_count)。
+
+        分页拉取全部 metadata:Chroma Cloud 对单次 get() 的 LimitValue 配额
+        上限为 300,超过会报 "Limit value exceeded quota"。故以 200 为批分页,
+        累计聚合,避免库增大后只统计到前 300 条 chunk。
+        """
         col = self._get_collection()
-        results = col.get(include=["metadatas"])
-        metas = results.get("metadatas") or []
+        metas: list[dict] = []
+        batch = 200  # 留余量,低于 Cloud Get 的 300 配额上限
+        offset = 0
+        while True:
+            results = col.get(include=["metadatas"], limit=batch, offset=offset)
+            batch_metas = results.get("metadatas") or []
+            if not batch_metas:
+                break
+            metas.extend(batch_metas)
+            if len(batch_metas) < batch:
+                break
+            offset += batch
         if not metas:
             return []
 

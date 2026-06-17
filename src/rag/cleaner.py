@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 import chardet
 from bs4 import BeautifulSoup, Tag
@@ -64,6 +65,30 @@ def _extract_js_meta(soup):
             match = pattern.search(code)
             if match:
                 meta[key] = match.group(1)
+    return meta
+
+
+def _fallback_meta(soup, source_path: str, meta: dict) -> dict:
+    """补充 JS 变量没抽到的元数据。
+
+    部分微信文章存档工具导出的 HTML 不含 var article_title / nickname /
+    create_time 等 JS 变量,改从其他位置兜底:
+      - title: <title> 标签
+      - publish_date: source_path 父目录名里的日期(目录形如 "2023-09-11 标题")
+
+    只补 meta 里缺失的字段,不覆盖已由 JS 抽到的值。
+    """
+    if "title" not in meta:
+        title_tag = soup.find("title")
+        if title_tag is not None:
+            title = title_tag.get_text(strip=True)
+            if title:
+                meta["title"] = title
+    if "publish_date" not in meta and source_path:
+        dir_name = Path(source_path).parent.name
+        date_match = re.search(r"(\d{4}-\d{2}-\d{2})", dir_name)
+        if date_match:
+            meta["publish_date"] = date_match.group(1)
     return meta
 
 
@@ -146,6 +171,8 @@ def clean_wechat_html(raw, source_path=""):
 
     # 3. 元数据提取（必须在剥 script 前）
     meta = _extract_js_meta(soup)
+    # 3.5 fallback:JS 变量没抽到的字段,从 <title> / 目录名日期补齐
+    _fallback_meta(soup, source_path, meta)
 
     # 4. 剥黑名单
     _strip_noise(soup)
