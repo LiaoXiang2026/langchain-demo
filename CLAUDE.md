@@ -60,6 +60,7 @@ docker compose down                      # 停止
 - 前端构建产物在 `frontend/dist/` 存在时挂载 `/assets` 静态资源 + SPA 兜底路由返回 `index.html`
 - 上传时严格校验扩展名（`ALLOWED_EXTENSIONS = {".md", ".pdf", ".html", ".htm"}`）,处理失败时 `unlink(missing_ok=True)` 清理已落盘文件
 - `/api/chat` 实现 Vercel AI SDK UI Message Stream Protocol: 发送 `text-start` → 多个 `text-delta` → `text-end` → `[DONE]`
+- 知识库与健康检查 HTTP 端点统一使用 `/api` 前缀（如 `/api/knowledge/*`、`/api/health`）
 
 **配置** — `src/config/settings.py`
 - `@dataclass` + `__post_init__` 从 `os.getenv` 覆盖默认值;环境变量优先
@@ -72,15 +73,15 @@ docker compose down                      # 停止
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | `POST` | `/api/chat` | AI SDK 流式对话（SSE,Vercel UI Message Stream Protocol） |
-| `POST` | `/knowledge/upload` | 上传文档（multipart）,走 `DocumentPipeline.ingest()` |
-| `GET` | `/knowledge/list` | 列出已入库文档（按 filename 聚合 chunk_count） |
-| `DELETE` | `/knowledge/{filename}` | 删除向量库记录 + 本地文件 |
-| `POST` | `/knowledge/search` | 直接检索（调试用）,请求体 `{"query": str, "k": int=4}` |
-| `GET` | `/health` | 健康检查 |
+| `POST` | `/api/knowledge/upload` | 上传文档（multipart）,走 `DocumentPipeline.ingest()` |
+| `GET` | `/api/knowledge/list` | 列出已入库文档（按 filename 聚合 chunk_count） |
+| `DELETE` | `/api/knowledge/{filename}` | 删除向量库记录 + 本地文件 |
+| `POST` | `/api/knowledge/search` | 直接检索（调试用）,请求体 `{"query": str, "k": int=4}` |
+| `GET` | `/api/health` | 健康检查 |
 
 ### 前端
 
-前端为独立项目仓库，不在此处维护。后端契约约定：聊天走 `/api/chat`（Vercel AI SDK UI Message Stream Protocol，见上），知识库走 `/knowledge/*`。`/api/chat` 请求体为 AI SDK 格式 `{"messages": [{role, parts: [{type:"text", text}]}]}`，服务端只取最后一条 role=user 消息的文本。
+前端为独立项目仓库，不在此处维护。后端契约约定：聊天走 `/api/chat`（Vercel AI SDK UI Message Stream Protocol，见上），知识库走 `/api/knowledge/*`。`/api/chat` 请求体为 AI SDK 格式 `{"messages": [{role, parts: [{type:"text", text}]}]}`，服务端只取最后一条 role=user 消息的文本。
 
 ### 数据目录
 
@@ -91,7 +92,7 @@ docker compose down                      # 停止
 ### 部署（Docker）
 
 - `Dockerfile`: 基于 `python:3.14-slim`，apt 源换阿里云镜像，装 `build-essential` + lxml 头文件（编译 C 扩展），用 `uv sync --frozen --no-dev` 装依赖，`uv run uvicorn server:app --workers 1 --proxy-headers` 启动。
-- `docker-compose.yml`: 单 `backend` 服务，`uploads` volume 持久化 `data/uploads`，`env_file: .env`，healthcheck 打 `/health`，内存上限 600M（适配 946M VPS）。
+- `docker-compose.yml`: 单 `backend` 服务，`uploads` volume 持久化 `data/uploads`，`env_file: .env`，healthcheck 打 `/api/health`，内存上限 600M（适配 946M VPS）。
 - Cloud 模式下后端轻量（无本地模型），单 worker 配置保留以兼容旧 compose；多 worker 现在也安全（共享状态在 Cloud 端）。
 
 ### 测试（`tests/`）

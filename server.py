@@ -143,7 +143,7 @@ async def vercel_chat(req: VercelChatRequest):
 ALLOWED_EXTENSIONS = {".md", ".pdf", ".html", ".htm"}
 
 
-@app.post("/knowledge/upload")
+@app.post("/api/knowledge/upload")
 async def knowledge_upload(file: UploadFile = File(...)):
     """上传文档到知识库
 
@@ -173,14 +173,14 @@ async def knowledge_upload(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=f"文档处理失败: {e}")
 
 
-@app.get("/knowledge/list")
+@app.get("/api/knowledge/list")
 async def knowledge_list():
     """列出已入库的所有文档"""
     pipeline: DocumentPipeline = app.state.pipeline
     return pipeline.list_documents()
 
 
-@app.delete("/knowledge/{filename}")
+@app.delete("/api/knowledge/{filename}")
 async def knowledge_delete(filename: str):
     """删除指定文档（同时删除向量库记录和本地文件）"""
     pipeline: DocumentPipeline = app.state.pipeline
@@ -199,7 +199,7 @@ class SearchRequest(BaseModel):
     k: int = 4  # 返回结果数量
 
 
-@app.post("/knowledge/search")
+@app.post("/api/knowledge/search")
 async def knowledge_search_api(req: SearchRequest):
     """知识库检索接口（调试用）
 
@@ -219,7 +219,7 @@ async def knowledge_search_api(req: SearchRequest):
 
 # ========== 健康检查 ==========
 
-@app.get("/health")
+@app.get("/api/health")
 def health():
     """健康检查接口，用于监控服务状态"""
     return {"status": "ok"}
