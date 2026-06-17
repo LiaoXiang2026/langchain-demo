@@ -1,5 +1,42 @@
 # My App Py
 
+## 快速开始
+
+### 1. 安装依赖
+
+```bash
+# 后端（Python 3.14，使用 uv）
+uv sync
+```
+
+### 2. 配置环境变量
+
+在项目根目录创建 `.env`（参考 `.env.example`）：
+
+```env
+# LLM
+DEEPSEEK_API_KEY=sk-你的密钥
+DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
+MODEL_NAME=deepseek-chat
+
+# Chroma Cloud
+CHROMA_HOST=europe-west1.gcp.trychroma.com
+CHROMA_TENANT=12e28eb4-2ece-483b-91b5-0cce2b3546e0
+CHROMA_DATABASE=RAG
+CHROMA_API_KEY=ck-你的密钥
+CHROMA_COLLECTION=knowledge_base
+```
+
+### 3. 启动
+
+```bash
+uv run python server.py          # FastAPI 服务（端口 8000，启用 reload）
+```
+
+访问 http://localhost:8000
+
+> 若前端仓库执行 `npm run build` 并将产物放到本仓库的 `frontend/dist/`，`server.py` 会自动挂载 `/assets` 静态资源 + SPA 兜底路由；否则后端仅作为 API 服务对外提供。
+
 基于 LangChain 的 AI Agent，聚焦 RAG 知识库问答。前端 (React) 通过 SSE 与后端 (FastAPI) 通信，Agent 自主决定是否调用 `knowledge_search` 检索知识库文档回答问题。
 
 ## 功能
@@ -71,44 +108,6 @@
 - Agent 自主路由：是否检索由 LLM 决定，非强制 RAG
 - 单 dense 嵌入：Qwen3-Embedding-0.6B，无 RRF/Splade/GroupBy，`vectorstore.py < 100 行`
 
-## 快速开始
-
-> 前端已剥离至独立项目仓库（见 commit c0af3b3），本仓库只含后端。下方仅涉及后端启动；前端开发/构建请到前端仓库进行。
-
-### 1. 安装依赖
-
-```bash
-# 后端（Python 3.14，使用 uv）
-uv sync
-```
-
-### 2. 配置环境变量
-
-在项目根目录创建 `.env`（参考 `.env.example`）：
-
-```env
-# LLM
-DEEPSEEK_API_KEY=sk-你的密钥
-DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
-MODEL_NAME=deepseek-chat
-
-# Chroma Cloud
-CHROMA_HOST=europe-west1.gcp.trychroma.com
-CHROMA_TENANT=12e28eb4-2ece-483b-91b5-0cce2b3546e0
-CHROMA_DATABASE=RAG
-CHROMA_API_KEY=ck-你的密钥
-CHROMA_COLLECTION=knowledge_base
-```
-
-### 3. 启动
-
-```bash
-uv run python server.py          # FastAPI 服务（端口 8000，启用 reload）
-```
-
-访问 http://localhost:8000
-
-> 若前端仓库执行 `npm run build` 并将产物放到本仓库的 `frontend/dist/`，`server.py` 会自动挂载 `/assets` 静态资源 + SPA 兜底路由；否则后端仅作为 API 服务对外提供。
 
 ## 使用知识库
 
