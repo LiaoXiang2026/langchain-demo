@@ -46,6 +46,7 @@ data/
 tests/
 docs/
 
-# 项目文档（容器内用不到）
+# 项目文档（容器内用不到，但 README.md 必须保留：pyproject.toml 引用，hatchling 构建时校验）
 *.md
+!README.md
 LICENSE*
