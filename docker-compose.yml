@@ -8,8 +8,7 @@ services:
     volumes:
       # 用户上传的原始文件(本地落盘,供人工查阅)
       - uploads:/app/data/uploads
-    env_file:
-      - .env
+    # 环境变量由 Dokploy UI 注入(不在 compose 里引用 .env 文件,避免文件缺失导致 up 失败)
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]

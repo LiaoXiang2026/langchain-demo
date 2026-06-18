@@ -1,13 +1,9 @@
 # syntax=docker/dockerfile:1.7
 
 # 后端镜像（不含前端静态资源，前端由独立项目托管）
-# 基础镜像：python:3.14-slim（Debian Bookworm）
-FROM python:3.14-slim
-
-# 切换 apt 源到阿里云镜像（避免官方源在国内极慢）
-# Debian 12+ 用 /etc/apt/sources.list.d/debian.sources（新格式），兼容老格式 sources.list
-RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources \
-    && (sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list || true)
+# 基础镜像：python:3.10-slim（Debian Bookworm），匹配 pyproject.toml 的 requires-python=">=3.10"
+# VPS 在国外，直接用官方 apt 源（比国内镜像更快）
+FROM python:3.10-slim
 
 # 系统依赖：
 #   build-essential       — 编译 lxml / pymupdf 等 C 扩展
@@ -23,7 +19,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # 装 uv（替代 pip，速度快 10-100x，单二进制）
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+# 锁定版本 0.11.21 保证构建可复现，避免 latest 标签未来引入不兼容变更
+COPY --from=ghcr.io/astral-sh/uv:0.11.21 /uv /usr/local/bin/uv
 
 WORKDIR /app
 
