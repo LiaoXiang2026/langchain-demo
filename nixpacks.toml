@@ -1,0 +1,13 @@
+# Nixpacks 构建配置(Dokploy Nixpacks 模式 / Railway 等 PaaS 通用)
+# https://nixpacks.com/docs/configuration/file
+#
+# 注意:Dokploy 选 Nixpacks 模式时,根目录 Dockerfile 会被忽略,
+# Nixpacks 直接读 pyproject.toml + uv.lock 构建镜像。
+# Python 版本由 requires-python=">=3.10" 决定,Nixpacks 会选最新兼容版本。
+
+# 启动命令:
+#   - $PORT 由 Dokploy 注入(与 UI 里 Port 字段一致),必须监听 0.0.0.0:$PORT
+#   - 单 worker:Chroma Cloud 模式下共享状态在云上,单 worker 足够且省内存
+#   - --proxy-headers:让 uvicorn 信任 Dokploy 反代(Traefik)的 X-Forwarded-* 头
+[start]
+cmd = "uv run uvicorn server:app --host 0.0.0.0 --port $PORT --workers 1 --proxy-headers"
