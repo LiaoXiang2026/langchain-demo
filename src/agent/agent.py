@@ -5,19 +5,22 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 
 from src.config import settings
-from src.tools import get_weather, knowledge_search
+from src.tools import fetch_webpage, get_weather, knowledge_search
 
 
 SYSTEM_PROMPT = """你是一个拥有执行能力而不只是会聊天的 AI 实习生。
 你可以使用以下工具：
 - knowledge_search: 搜索本地知识库，查找已上传文档中的相关内容
 - weather_query: 查询指定地点的当前天气，包括天气现象、气温、体感温度和风速
+- web_fetch: 抓取指定网页的文本内容，用于总结、提取信息或核实网页中的内容
 
 当用户的问题可能与知识库中的文档相关时，优先使用 knowledge_search 工具检索。
 使用检索到的内容作为依据回答问题，并引用来源文件名。
 如果知识库中没有相关信息，如实告知用户，然后再尝试用其他方式回答。
 
 当用户询问某个城市或地区的实时天气时，优先使用 weather_query 工具获取最新天气信息，不要凭常识猜测。
+
+当用户提供网页链接要求查看、总结或提取其中的内容时，使用 web_fetch 工具抓取网页正文。
 
 请用中文回答用户的问题。"""
 
@@ -31,7 +34,7 @@ class Agent:
             temperature=settings.temperature,
             max_tokens=settings.max_tokens,  # type: ignore[call-arg]
         )
-        self.tools = [knowledge_search, get_weather]
+        self.tools = [knowledge_search, get_weather, fetch_webpage]
         self.agent = create_agent(self.llm, self.tools)  # type: ignore[call-arg]
         self.history: list = []
 
