@@ -9,6 +9,7 @@
 dedup 短路保证 D-09:重复文档不再走嵌入(节省算力),仅在响应里说明 "skip_count"。
 """
 
+import hashlib
 from datetime import datetime
 from pathlib import Path
 
@@ -25,19 +26,13 @@ from src.rag.vectorstore import VectorStore
 class DocumentPipeline:
     def __init__(
         self,
-        persist_dir: str | None = None,  # noqa: ARG002 - 兼容旧签名,Cloud 模式忽略
-        embedding_model: str | None = None,  # noqa: ARG002 - 兼容旧签名,Cloud 模式忽略
+        data_dir: str | None = None,
         chunk_size: int | None = None,
         chunk_overlap: int | None = None,
     ):
-        # persist_dir / embedding_model 参数保留以兼容旧调用方,Cloud 模式下不使用
         self.chunk_size = chunk_size or settings.chunk_size
         self.chunk_overlap = chunk_overlap or settings.chunk_overlap
-        # Cloud 模式下 VectorStore 不再需要这两个参数,但保留签名兼容
-        self._store = VectorStore(
-            persist_dir=persist_dir,
-            embedding_model=embedding_model,
-        )
+        self._store = VectorStore(data_dir=data_dir)
         self.dedup_index = DedupIndex(self._store)
 
     def ingest(self, file_path: str) -> dict:
@@ -46,6 +41,19 @@ class DocumentPipeline:
         docs = load_document(file_path)
         chunks = split_documents(docs, self.chunk_size, self.chunk_overlap)
         count = self._store.add_documents(chunks, filename=filename)
+        # 保存文档元信息到 documents.json
+        self._store.save_document(filename, {
+            "title": filename,
+            "author": "",
+            "publish_date": "",
+            "text": "\n".join(doc.page_content for doc in docs),
+            "content_hash": hashlib.sha256(
+                "\n".join(doc.page_content for doc in docs).encode("utf-8")
+            ).hexdigest(),
+            "source_path": file_path,
+            "chunk_count": count,
+            "ingested_at": datetime.now().isoformat(),
+        })
         return {"filename": filename, "chunk_count": count}
 
     def ingest_cleaned(
@@ -96,6 +104,14 @@ class DocumentPipeline:
         else:
             filename = p.name or "unknown"
         count = self._store.add_documents(chunks, filename=filename)
+        # 保存文档元信息到 documents.json
+        self._store.save_document(filename, {
+            **merged_meta,
+            "text": text,
+            "source_path": str(source_path),
+            "chunk_count": count,
+            "ingested_at": merged_meta["ingested_at"],
+        })
         return {
             "status": "new",
             "content_hash": content_hash,
