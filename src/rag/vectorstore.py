@@ -78,7 +78,7 @@ class VectorStore:
         )
         os.replace(tmp_chunks, self._chunks_path)
         if self._embeddings is not None and self._embeddings.size > 0:
-            tmp_emb = self._embeddings_path.with_suffix(".npy.tmp")
+            tmp_emb = self._embeddings_path.with_stem(self._embeddings_path.stem + "_tmp")
             np.save(tmp_emb, self._embeddings)
             os.replace(tmp_emb, self._embeddings_path)
 
