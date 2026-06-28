@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import threading
 from pathlib import Path
 
@@ -39,26 +40,47 @@ class VectorStore:
         # 延迟加载嵌入模型(首次 encode 时初始化)
         self._model: SentenceTransformer | None = None
         self._model_lock = threading.Lock()
+        self._write_lock = threading.Lock()
 
     def _load(self) -> None:
         """从磁盘加载 chunks/embeddings/documents。"""
         if self._chunks_path.exists():
             self._chunks = json.loads(self._chunks_path.read_text(encoding="utf-8"))
         if self._embeddings_path.exists():
-            self._embeddings = np.load(self._embeddings_path)
-            if self._embeddings.ndim == 1:
-                self._embeddings = self._embeddings.reshape(1, -1)
+            try:
+                self._embeddings = np.load(self._embeddings_path)
+                if self._embeddings.ndim == 1:
+                    self._embeddings = self._embeddings.reshape(1, -1)
+            except (ValueError, OSError) as e:
+                import logging
+                logging.getLogger(__name__).warning(
+                    "嵌入文件损坏，忽略: %s", e
+                )
+                self._embeddings = None
         if self._documents_path.exists():
             self._documents = json.loads(self._documents_path.read_text(encoding="utf-8"))
+        # 一致性检查
+        if self._embeddings is not None and len(self._chunks) != self._embeddings.shape[0]:
+            import logging
+            logging.getLogger(__name__).warning(
+                "chunks 与 embeddings 行数不一致(%d vs %d)，重置",
+                len(self._chunks), self._embeddings.shape[0],
+            )
+            self._chunks = []
+            self._embeddings = None
 
     def _persist_chunks(self) -> None:
-        """持久化 chunks.json + embeddings.npy。"""
-        self._chunks_path.write_text(
+        """持久化 chunks.json + embeddings.npy(原子写入)。"""
+        tmp_chunks = self._chunks_path.with_suffix(".json.tmp")
+        tmp_chunks.write_text(
             json.dumps(self._chunks, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
+        os.replace(tmp_chunks, self._chunks_path)
         if self._embeddings is not None and self._embeddings.size > 0:
-            np.save(self._embeddings_path, self._embeddings)
+            tmp_emb = self._embeddings_path.with_suffix(".npy.tmp")
+            np.save(tmp_emb, self._embeddings)
+            os.replace(tmp_emb, self._embeddings_path)
 
     def _persist_documents(self) -> None:
         """持久化 documents.json。"""
@@ -97,33 +119,33 @@ class VectorStore:
         """添加文档到向量存储，返回 chunk 数量。"""
         if not docs:
             return 0
+        with self._write_lock:
+            texts = [doc.page_content for doc in docs]
+            new_embeddings = self._encode(texts)  # (N, dim)
 
-        texts = [doc.page_content for doc in docs]
-        new_embeddings = self._encode(texts)  # (N, dim)
+            # 追加 chunks
+            for i, doc in enumerate(docs):
+                meta = dict(doc.metadata)
+                meta["source"] = filename
+                meta["chunk_id"] = i
+                ch = meta.get("content_hash")
+                id_prefix = ch if ch else hashlib.sha1(filename.encode("utf-8")).hexdigest()
+                self._chunks.append({
+                    "id": f"{id_prefix}::chunk-{i}",
+                    "doc_id": filename,
+                    "chunk_i": i,
+                    "text": doc.page_content,
+                    "metadata": meta,
+                })
 
-        # 追加 chunks
-        for i, doc in enumerate(docs):
-            meta = dict(doc.metadata)
-            meta["source"] = filename
-            meta["chunk_id"] = i
-            ch = meta.get("content_hash")
-            id_prefix = ch if ch else hashlib.sha1(filename.encode("utf-8")).hexdigest()
-            self._chunks.append({
-                "id": f"{id_prefix}::chunk-{i}",
-                "doc_id": filename,
-                "chunk_i": i,
-                "text": doc.page_content,
-                "metadata": meta,
-            })
+            # 追加嵌入矩阵
+            if self._embeddings is None:
+                self._embeddings = new_embeddings
+            else:
+                self._embeddings = np.vstack([self._embeddings, new_embeddings])
 
-        # 追加嵌入矩阵
-        if self._embeddings is None:
-            self._embeddings = new_embeddings
-        else:
-            self._embeddings = np.vstack([self._embeddings, new_embeddings])
-
-        self._persist_chunks()
-        return len(docs)
+            self._persist_chunks()
+            return len(docs)
 
     def search(self, query: str, k: int = 4) -> list[Document]:
         """相似度搜索(余弦相似度,已归一化向量点积等价于余弦)。"""
@@ -152,18 +174,19 @@ class VectorStore:
 
     def delete_by_filename(self, filename: str) -> None:
         """根据文件名删除所有相关 chunks。"""
-        keep_indices = [
-            i for i, c in enumerate(self._chunks)
-            if c.get("doc_id") != filename
-        ]
-        if len(keep_indices) == len(self._chunks):
-            return  # 没有匹配的
+        with self._write_lock:
+            keep_indices = [
+                i for i, c in enumerate(self._chunks)
+                if c.get("doc_id") != filename
+            ]
+            if len(keep_indices) == len(self._chunks):
+                return  # 没有匹配的
 
-        self._chunks = [self._chunks[i] for i in keep_indices]
-        if self._embeddings is not None:
-            self._embeddings = self._embeddings[keep_indices]
+            self._chunks = [self._chunks[i] for i in keep_indices]
+            if self._embeddings is not None:
+                self._embeddings = self._embeddings[keep_indices]
 
-        self._persist_chunks()
+            self._persist_chunks()
 
     def list_documents(self) -> list[dict]:
         """列出已入库的文档(按 filename 聚合 chunk_count)。"""
@@ -206,5 +229,6 @@ class VectorStore:
 
     def save_document(self, doc_id: str, data: dict) -> None:
         """保存/更新单篇文档信息到 documents.json。"""
-        self._documents[doc_id] = data
-        self._persist_documents()
+        with self._write_lock:
+            self._documents[doc_id] = data
+            self._persist_documents()
