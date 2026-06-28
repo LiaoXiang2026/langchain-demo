@@ -18,7 +18,7 @@ import json
 import shutil
 
 from src.agent import Agent, build_agent
-from src.rag import DocumentPipeline
+from src.rag import DocumentPipeline, DocumentClassifier
 from src.config import settings
 
 # 前端构建产物目录
@@ -33,6 +33,10 @@ async def lifespan(app: FastAPI):
     # 启动时：创建 Agent 实例和文档处理管线
     app.state.agent = build_agent()
     app.state.pipeline = DocumentPipeline()
+    app.state.classifier = DocumentClassifier(
+        store=app.state.pipeline._store,
+        llm=app.state.agent.llm,
+    )
     # 确保上传目录存在
     Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
     yield
@@ -215,6 +219,42 @@ async def knowledge_search_api(req: SearchRequest):
         }
         for doc in results
     ]
+
+
+class ReclusterRequest(BaseModel):
+    """重聚类请求体"""
+    k: int | None = None  # 可选固定 k，不传则自动择优
+
+
+@app.post("/api/knowledge/recluster")
+async def knowledge_recluster(req: ReclusterRequest | None = None):
+    """手动触发全量重聚类。
+
+    返回聚类结果（clusters.json 内容）。
+    文档数不足 5 篇时返回 400 错误。
+    """
+    classifier: DocumentClassifier = app.state.classifier
+    try:
+        k = req.k if req and req.k else None
+        k_range = (k, k) if k else None
+        return classifier.recluster(k_range=k_range)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"聚类失败: {e}")
+
+
+@app.get("/api/knowledge/clusters")
+async def knowledge_clusters():
+    """获取当前聚类结果。
+
+    尚未聚类时返回 404。
+    """
+    classifier: DocumentClassifier = app.state.classifier
+    result = classifier.get_clusters()
+    if result is None:
+        raise HTTPException(status_code=404, detail="尚未聚类，请先 POST /api/knowledge/recluster")
+    return result
 
 
 # ========== 健康检查 ==========
