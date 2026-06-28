@@ -20,14 +20,13 @@ dependencies = [
     "langchain-openai>=1.2.2",
     "langchain-text-splitters>=0.0.1",
     "lxml>=6.1.1",
+    "numpy>=1.26",
     "pymupdf>=1.23.0",
     "python-dotenv>=1.2.2",
     "python-multipart>=0.0.29",
+    "scikit-learn>=1.4",
+    "sentence-transformers>=3.0",
     "uvicorn>=0.34.0",
-    # RAG:Cloud 端用 chromadb>=1.5.0 提供 CloudClient / Schema / Search / Rrf API
-    # 不再需要 langchain-chroma / langchain-huggingface / sentence-transformers:
-    # 嵌入由 Chroma Cloud 托管(Qwen dense + Splade sparse),本机不烘模型。
-    "chromadb>=1.5.0",
 ]
 
 [dependency-groups]
