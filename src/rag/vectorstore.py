@@ -1,147 +1,210 @@
-"""Chroma Cloud 向量存储管理(简化版)。
+"""本地 numpy 向量存储管理。
 
-只用 dense 嵌入(Chroma Cloud Qwen3-Embedding-0.6B),走最简单的 col.query() API。
-无 Rrf / Splade / GroupBy / 2-step search,代码量 < 100 行。
+用 sentence-transformers 本地加载 Qwen3-Embedding-0.6B 做嵌入，
+numpy 矩阵存向量，JSON 存文本/元数据。检索走 numpy 余弦相似度。
 """
 
 from __future__ import annotations
 
 import hashlib
+import json
+import threading
+from pathlib import Path
 
-import chromadb
-from chromadb.utils.embedding_functions import ChromaCloudQwenEmbeddingFunction
-from chromadb.utils.embedding_functions.chroma_cloud_qwen_embedding_function import (
-    ChromaCloudQwenEmbeddingModel,
-)
+import numpy as np
 from langchain_core.documents import Document
+from sentence_transformers import SentenceTransformer
 
 from src.config import settings
 
 
 class VectorStore:
-    """Chroma Cloud 向量存储封装。"""
+    """本地 numpy 向量存储。"""
 
-    def __init__(
-        self,
-        persist_dir: str | None = None,  # noqa: ARG002 - 兼容旧签名,Cloud 模式忽略
-        embedding_model: str | None = None,  # noqa: ARG002 - 兼容旧签名,Cloud 模式忽略
-    ):
-        if not settings.chroma_api_key:
-            raise RuntimeError(
-                "CHROMA_API_KEY 未配置。请在 .env 设置 CHROMA_API_KEY=ck-... 后重启服务。"
-            )
+    def __init__(self, data_dir: str | None = None):
+        self._data_dir = Path(data_dir or settings.data_dir)
+        self._data_dir.mkdir(parents=True, exist_ok=True)
 
-        self._client = chromadb.CloudClient(
-            cloud_host=settings.chroma_host,
-            cloud_port=settings.chroma_port,
-            api_key=settings.chroma_api_key,
-            tenant=settings.chroma_tenant,
-            database=settings.chroma_database,
+        self._chunks_path = self._data_dir / "chunks.json"
+        self._embeddings_path = self._data_dir / "embeddings.npy"
+        self._documents_path = self._data_dir / "documents.json"
+
+        # 加载已有数据
+        self._chunks: list[dict] = []
+        self._embeddings: np.ndarray | None = None  # (N, dim)
+        self._documents: dict[str, dict] = {}
+
+        self._load()
+
+        # 延迟加载嵌入模型(首次 encode 时初始化)
+        self._model: SentenceTransformer | None = None
+        self._model_lock = threading.Lock()
+
+    def _load(self) -> None:
+        """从磁盘加载 chunks/embeddings/documents。"""
+        if self._chunks_path.exists():
+            self._chunks = json.loads(self._chunks_path.read_text(encoding="utf-8"))
+        if self._embeddings_path.exists():
+            self._embeddings = np.load(self._embeddings_path)
+            if self._embeddings.ndim == 1:
+                self._embeddings = self._embeddings.reshape(1, -1)
+        if self._documents_path.exists():
+            self._documents = json.loads(self._documents_path.read_text(encoding="utf-8"))
+
+    def _persist_chunks(self) -> None:
+        """持久化 chunks.json + embeddings.npy。"""
+        self._chunks_path.write_text(
+            json.dumps(self._chunks, ensure_ascii=False, indent=2),
+            encoding="utf-8",
         )
-        self._collection = None  # 懒加载
+        if self._embeddings is not None and self._embeddings.size > 0:
+            np.save(self._embeddings_path, self._embeddings)
 
-    def _get_collection(self):
-        """懒加载 collection:首次访问时按默认 EF 初始化。"""
-        if self._collection is None:
-            # Cloud 端托管的 dense 嵌入函数(从 CHROMA_API_KEY 环境变量读 key)
-            # task=None → Cloud 端用空 instructions(通用文本),适合中英混排的 RAG
-            qwen_ef = ChromaCloudQwenEmbeddingFunction(
-                model=ChromaCloudQwenEmbeddingModel.QWEN3_EMBEDDING_0p6B,
-                task=None,
-                api_key_env_var="CHROMA_API_KEY",
-            )
-            self._collection = self._client.get_or_create_collection(
-                name=settings.chroma_collection,
-                embedding_function=qwen_ef,
-            )
-        return self._collection
+    def _persist_documents(self) -> None:
+        """持久化 documents.json。"""
+        self._documents_path.write_text(
+            json.dumps(self._documents, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+    def _get_model(self) -> SentenceTransformer:
+        """懒加载嵌入模型(线程安全,首次调用时下载/加载)。"""
+        if self._model is None:
+            with self._model_lock:
+                if self._model is None:
+                    self._model = SentenceTransformer(
+                        settings.embedding_model,
+                        trust_remote_code=True,
+                    )
+        return self._model
+
+    def _encode(self, texts: list[str]) -> np.ndarray:
+        """将文本列表编码为嵌入矩阵 (len(texts), dim)。"""
+        model = self._get_model()
+        embeddings = model.encode(
+            texts,
+            normalize_embeddings=True,  # 归一化后点积即余弦相似度
+            show_progress_bar=False,
+        )
+        return np.array(embeddings, dtype=np.float32)
 
     def close(self) -> None:
-        """no-op(Cloud 客户端无文件锁概念)。"""
-        pass
+        """no-op。"""
+
+    # ---- 对外接口(与 Chroma 版本签名一致) ----
 
     def add_documents(self, docs: list[Document], filename: str) -> int:
-        """添加文档到向量存储,返回 chunk 数量。
-
-        Cloud 端在收到 documents 后自动调用 hosted embedding 完成嵌入。
-        元数据继承与隔离:重建新 dict 防止跨调用 metadata 引用污染。
-        """
+        """添加文档到向量存储，返回 chunk 数量。"""
         if not docs:
             return 0
 
-        col = self._get_collection()
-        ids: list[str] = []
-        documents: list[str] = []
-        metadatas: list[dict] = []
+        texts = [doc.page_content for doc in docs]
+        new_embeddings = self._encode(texts)  # (N, dim)
 
+        # 追加 chunks
         for i, doc in enumerate(docs):
-            meta = dict(doc.metadata)  # 隔离:防止引用污染
+            meta = dict(doc.metadata)
             meta["source"] = filename
             meta["chunk_id"] = i
-            # id 前缀优先用 content_hash(dedup 流程注入),无则用 filename 的短 hash 兜底。
-            # 不能直接拿 filename 当 id 前缀:中文长标题 UTF-8 编码后易超 Chroma Cloud
-            # 的 ID 字节数配额(128B),导致 "ID size exceeded quota" 入库失败。
-            # 完整文件名仍保留在 metadata["source"] 供检索/列表/删除使用,不受 ID 限制。
             ch = meta.get("content_hash")
             id_prefix = ch if ch else hashlib.sha1(filename.encode("utf-8")).hexdigest()
-            ids.append(f"{id_prefix}::chunk-{i}")
-            documents.append(doc.page_content)
-            metadatas.append(meta)
+            self._chunks.append({
+                "id": f"{id_prefix}::chunk-{i}",
+                "doc_id": filename,
+                "chunk_i": i,
+                "text": doc.page_content,
+                "metadata": meta,
+            })
 
-        col.add(documents=documents, metadatas=metadatas, ids=ids)
+        # 追加嵌入矩阵
+        if self._embeddings is None:
+            self._embeddings = new_embeddings
+        else:
+            self._embeddings = np.vstack([self._embeddings, new_embeddings])
+
+        self._persist_chunks()
         return len(docs)
 
     def search(self, query: str, k: int = 4) -> list[Document]:
-        """相似度搜索(单次往返,Cloud 端嵌入 + 检索)。"""
-        col = self._get_collection()
-        results = col.query(query_texts=[query], n_results=k)
-
-        docs_out: list[Document] = []
-        # query() 返回嵌套 list,外层是 query 维度(我们只发 1 个 query → [0])
-        for i, doc_text in enumerate(results.get("documents", [[]])[0] or []):
-            metas = results.get("metadatas", [[]])[0] or []
-            meta = metas[i] if i < len(metas) else {}
-            docs_out.append(Document(page_content=doc_text or "", metadata=meta or {}))
-        return docs_out
-
-    def delete_by_filename(self, filename: str) -> None:
-        """根据文件名删除所有相关 chunks(走 where filter)。"""
-        col = self._get_collection()
-        col.delete(where={"source": filename})
-
-    def list_documents(self) -> list[dict]:
-        """列出已入库的文档(按 filename 聚合 chunk_count)。
-
-        分页拉取全部 metadata:Chroma Cloud 对单次 get() 的 LimitValue 配额
-        上限为 300,超过会报 "Limit value exceeded quota"。故以 200 为批分页,
-        累计聚合,避免库增大后只统计到前 300 条 chunk。
-        """
-        col = self._get_collection()
-        metas: list[dict] = []
-        batch = 200  # 留余量,低于 Cloud Get 的 300 配额上限
-        offset = 0
-        while True:
-            results = col.get(include=["metadatas"], limit=batch, offset=offset)
-            batch_metas = results.get("metadatas") or []
-            if not batch_metas:
-                break
-            metas.extend(batch_metas)
-            if len(batch_metas) < batch:
-                break
-            offset += batch
-        if not metas:
+        """相似度搜索(余弦相似度,已归一化向量点积等价于余弦)。"""
+        if self._embeddings is None or len(self._chunks) == 0:
             return []
 
+        q_vec = self._encode([query])[0]  # (dim,)
+        scores = np.dot(self._embeddings, q_vec)
+        # 取 top-k(降序)
+        if k >= len(scores):
+            top_indices = np.argsort(scores)[::-1]
+        else:
+            top_indices = np.argpartition(scores, -k)[-k:]
+            top_indices = top_indices[np.argsort(scores[top_indices])[::-1]]
+
+        results: list[Document] = []
+        for idx in top_indices:
+            if scores[idx] <= 0:
+                continue
+            chunk = self._chunks[idx]
+            results.append(Document(
+                page_content=chunk["text"],
+                metadata=chunk.get("metadata", {}),
+            ))
+        return results
+
+    def delete_by_filename(self, filename: str) -> None:
+        """根据文件名删除所有相关 chunks。"""
+        keep_indices = [
+            i for i, c in enumerate(self._chunks)
+            if c.get("doc_id") != filename
+        ]
+        if len(keep_indices) == len(self._chunks):
+            return  # 没有匹配的
+
+        self._chunks = [self._chunks[i] for i in keep_indices]
+        if self._embeddings is not None:
+            self._embeddings = self._embeddings[keep_indices]
+
+        self._persist_chunks()
+
+    def list_documents(self) -> list[dict]:
+        """列出已入库的文档(按 filename 聚合 chunk_count)。"""
         doc_map: dict[str, dict] = {}
-        for meta in metas:
-            fname = meta.get("source", "unknown")
+        for chunk in self._chunks:
+            fname = chunk.get("doc_id") or chunk.get("metadata", {}).get("source", "unknown")
             if fname not in doc_map:
                 doc_map[fname] = {"filename": fname, "chunk_count": 0}
             doc_map[fname]["chunk_count"] += 1
         return list(doc_map.values())
 
     def exists_by_metadata(self, where: dict, limit: int = 1) -> bool:
-        """按 metadata where filter 查 Chroma,返回是否存在(供 DedupIndex 用)。"""
-        col = self._get_collection()
-        results = col.get(where=where, limit=limit)
-        return bool(results and results.get("ids"))
+        """按 metadata 字段查重(供 DedupIndex 用)。
+
+        where 形如 {"content_hash": "sha256..."}，
+        扫描 chunks 的 metadata，命中即返回 True。
+        """
+        count = 0
+        for chunk in self._chunks:
+            meta = chunk.get("metadata", {})
+            if all(meta.get(k) == v for k, v in where.items()):
+                count += 1
+                if count >= limit:
+                    return True
+        return False
+
+    # ---- 供 Classifier 使用的内部方法 ----
+
+    def get_all_chunks(self) -> list[dict]:
+        """返回所有 chunks(含 metadata),供分类器聚合篇级向量。"""
+        return list(self._chunks)
+
+    def get_all_embeddings(self) -> np.ndarray | None:
+        """返回嵌入矩阵,供分类器使用。"""
+        return self._embeddings
+
+    def get_documents(self) -> dict[str, dict]:
+        """返回 documents.json 内容。"""
+        return dict(self._documents)
+
+    def save_document(self, doc_id: str, data: dict) -> None:
+        """保存/更新单篇文档信息到 documents.json。"""
+        self._documents[doc_id] = data
+        self._persist_documents()
