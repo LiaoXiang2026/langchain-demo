@@ -23,9 +23,15 @@ def knowledge_search(query: str) -> str:
         if not results:
             return "知识库中没有找到相关信息。"
         parts = []
+        # 给每条检索结果分配稳定引用编号 [1] [2] ...，供模型在回答中标注
         for i, doc in enumerate(results, 1):
             source = doc.metadata.get("source", "未知来源")
-            parts.append(f"[来源: {source}]\n{doc.page_content}")
+            chunk_id = doc.metadata.get("chunk_id", "")
+            cite_tag = f"[{i}]"  # 引用编号
+            header = f"{cite_tag} 来源: {source}"
+            if chunk_id != "":
+                header += f" (chunk-{chunk_id})"
+            parts.append(f"{header}\n{doc.page_content}")
         return "\n\n---\n\n".join(parts)
     except Exception as e:
         return f"知识库检索出错: {e}"
