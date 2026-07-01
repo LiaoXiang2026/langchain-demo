@@ -19,7 +19,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # 装 uv（替代 pip，速度快 10-100x，单二进制）
 # 锁定版本 0.11.21 保证构建可复现，避免 latest 标签未来引入不兼容变更
-COPY --from=ghcr.io/astral-sh/uv:0.11.21 /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.11.26 /uv /usr/local/bin/uv
 
 WORKDIR /app
 
