@@ -8,13 +8,12 @@ FROM python:3.10-slim
 # 系统依赖：
 #   build-essential       — 编译 lxml / pymupdf 等 C 扩展
 #   libxml2-dev libxslt1-dev — lxml 头文件
+#   libgomp1              — PyTorch (sentence-transformers) 的 OpenMP 运行时
 #   curl                  — healthcheck 用
-#
-# 注意：不再需要 libgomp1（sentence-transformers 及其 PyTorch 依赖已删除），
-# 不再烘本地嵌入模型（Chroma Cloud 端托管 Qwen + Splade）。
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential \
         libxml2-dev libxslt1-dev \
+        libgomp1 \
         curl \
     && rm -rf /var/lib/apt/lists/*
 
@@ -28,18 +27,24 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev
 
+# 预下载嵌入模型到镜像内，避免运行时首次下载（~1.2GB，依赖 HuggingFace 网络）
+# 模型缓存在 /root/.cache/huggingface/，启动时 SentenceTransformer 直接从本地加载
+COPY src/config ./src/config
+RUN uv run python -c \
+    "from sentence_transformers import SentenceTransformer; \
+     SentenceTransformer('Qwen/Qwen3-Embedding-0.6B', trust_remote_code=True)" \
+    && rm -rf /root/.cache/huggingface/hub/.locks
+
 # 拷源码（变化最频繁，放最后）
 COPY src ./src
 COPY server.py ./
 
-# 给 volume 挂载点占好位（Cloud 模式下 chroma-data 不再需要，但保留兼容旧 docker-compose）
+# data/ 目录挂载点（chunks.json / embeddings.npy / documents.json / clusters.json / uploads/）
 RUN mkdir -p data/uploads
 
 EXPOSE 8000
 
-# Cloud 模式下：
-#   - 不再持有本地嵌入模型/向量索引,启动即连 Chroma Cloud
-#   - 多 worker 现在安全了（共享状态在 Cloud），但保留单 worker 配置以便复用旧 compose
+# 单 worker：sentence-transformers 模型常驻内存，多 worker 会重复加载导致 OOM
 # --proxy-headers：让 uvicorn 信任反代的 X-Forwarded-* 头
 CMD ["uv", "run", "uvicorn", "server:app", \
      "--host", "0.0.0.0", "--port", "8000", \

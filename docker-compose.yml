@@ -6,8 +6,8 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      # 用户上传的原始文件(本地落盘,供人工查阅)
-      - uploads:/app/data/uploads
+      # 持久化整个 data/ 目录（chunks.json / embeddings.npy / documents.json / clusters.json / uploads/）
+      - app-data:/app/data
     # 环境变量由 Dokploy UI 注入(不在 compose 里引用 .env 文件,避免文件缺失导致 up 失败)
     restart: unless-stopped
     healthcheck:
@@ -15,19 +15,19 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      # Chroma Cloud 模式下无需加载本地模型,启动极快
-      start_period: 20s
+      # 首次启动加载 sentence-transformers 模型需要时间
+      start_period: 60s
     logging:
       driver: json-file
       options:
         max-size: "10m"
         max-file: "3"
-    # 内存限制：Chroma Cloud 模式下后端很轻（FastAPI + 一点 Python 运行时，~150-250MB 稳态）
-    # 946MB VPS 上保留 600MB headroom 以应对流量尖峰和 Cloud 端响应延迟时的 in-flight 请求
+    # 内存限制：sentence-transformers + PyTorch + Qwen3-Embedding-0.6B 常驻约 1.5-2GB
+    # 4GB VPS 上留 2GB headroom 给 OS + 其他进程
     deploy:
       resources:
         limits:
-          memory: 600M
+          memory: 2G
 
 volumes:
-  uploads:
+  app-data:
