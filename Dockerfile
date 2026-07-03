@@ -32,7 +32,7 @@ COPY --from=ghcr.io/astral-sh/uv:0.11.26 /uv /usr/local/bin/uv
 WORKDIR /app
 
 # 先装 Python 依赖：pyproject.toml / uv.lock 不变则这层命中缓存，不重装
-COPY pyproject.toml uv.lock ./
+COPY pyproject.toml uv.lock README.md ./
 RUN uv sync --no-dev
 
 # 预下载嵌入模型到镜像内，避免运行时首次下载（~1.2GB，依赖 HuggingFace 网络）
