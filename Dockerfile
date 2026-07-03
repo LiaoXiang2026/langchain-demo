@@ -9,6 +9,8 @@ COPY frontend/package.json frontend/pnpm-lock.yaml ./
 RUN pnpm install
 # 复制源码并构建
 COPY frontend/ .
+ARG VITE_ACCESS_PASSWORD
+ENV VITE_ACCESS_PASSWORD=${VITE_ACCESS_PASSWORD}
 RUN pnpm build
 
 # ---- Stage 2: 后端 + 前端静态资源 ----

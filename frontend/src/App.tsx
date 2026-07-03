@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import ChatPanel from './ChatPanel'
 import KnowledgePanel from './KnowledgePanel'
+import LockScreen from './LockScreen'
 
 type Tab = 'chat' | 'knowledge'
 
@@ -11,6 +12,14 @@ const TABS: { id: Tab; index: string; label: string }[] = [
 
 function App() {
   const [tab, setTab] = useState<Tab>('chat')
+  const [unlocked, setUnlocked] = useState(
+    () => sessionStorage.getItem('corvus_unlocked') === '1'
+      || !(import.meta.env.VITE_ACCESS_PASSWORD)
+  )
+
+  if (!unlocked) {
+    return <LockScreen onUnlock={() => setUnlocked(true)} />
+  }
 
   return (
     <div className="h-screen flex flex-col bg-paper text-ink">
