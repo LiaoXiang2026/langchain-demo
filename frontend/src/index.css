@@ -1,0 +1,226 @@
+@import "tailwindcss";
+
+/* ──────────────────────────────────────────────────────────────
+   CORVUS — editorial paper system
+   warm paper · deep ink · one oxblood accent
+   ────────────────────────────────────────────────────────────── */
+
+@theme {
+  --font-serif: "Instrument Serif", "Songti SC", "Noto Serif SC", Georgia, serif;
+  --font-sans: "Hanken Grotesk", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
+
+  /* paper — warm off-white, never pure */
+  --color-paper: oklch(0.96 0.006 85);
+  --color-paper-2: oklch(0.935 0.005 85);
+
+  /* ink — warm near-black, never pure */
+  --color-ink: oklch(0.18 0.012 85);
+  --color-ink-2: oklch(0.34 0.010 85);
+  --color-ink-3: oklch(0.52 0.008 85);
+
+  /* hairline rule */
+  --color-rule: oklch(0.85 0.005 85);
+
+  /* the one accent — deep oxblood, used sparingly */
+  --color-accent: oklch(0.40 0.075 27);
+  --color-accent-2: oklch(0.48 0.08 27);
+}
+
+:root {
+  color-scheme: light;
+}
+
+html {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-feature-settings: "ss01", "cv11", "kern";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  margin: 0;
+  background: var(--color-paper);
+}
+
+::selection {
+  background: var(--color-ink);
+  color: var(--color-paper);
+}
+
+/* restrained scrollbar — sits quietly in the margin */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--color-rule);
+  border: 3px solid var(--color-paper);
+  border-radius: 0;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--color-ink-3); }
+
+/* ── typographic helpers ─────────────────────────────────────── */
+
+/* small-caps label — for section indices, speaker tags, meta */
+.smcp {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+/* tabular numerals — for indices and counts */
+.numeral {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* ── motion ──────────────────────────────────────────────────── */
+
+@keyframes reveal {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.reveal {
+  animation: reveal 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.fade { animation: fade 0.4s ease-out both; }
+
+/* the composing mark — a slow, quiet pulse. no bouncing dots. */
+@keyframes compose {
+  0%, 100% { opacity: 0.22; }
+  50% { opacity: 0.65; }
+}
+.compose { animation: compose 1.8s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ── markdown, reset for editorial reading ───────────────────── */
+
+.x-markdown-wrapper {
+  font-size: 0.95rem;
+  line-height: 1.72;
+  color: var(--color-ink);
+}
+.x-markdown-wrapper > * { margin: 0; }
+.x-markdown-wrapper > * + * { margin-top: 0.85rem; }
+.x-markdown-wrapper p { margin: 0; }
+
+.x-markdown-wrapper h1,
+.x-markdown-wrapper h2,
+.x-markdown-wrapper h3 {
+  font-family: var(--font-serif);
+  font-weight: 400;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  margin: 1.5rem 0 0.6rem;
+}
+.x-markdown-wrapper h1 { font-size: 1.65rem; }
+.x-markdown-wrapper h2 { font-size: 1.35rem; }
+.x-markdown-wrapper h3 { font-size: 1.15rem; }
+.x-markdown-wrapper h4,
+.x-markdown-wrapper h5,
+.x-markdown-wrapper h6 {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 0.9rem;
+  letter-spacing: 0.02em;
+  margin: 1rem 0 0.4rem;
+}
+
+.x-markdown-wrapper ul,
+.x-markdown-wrapper ol {
+  padding-left: 1.3rem;
+  margin: 0;
+}
+.x-markdown-wrapper li + li { margin-top: 0.3rem; }
+.x-markdown-wrapper li::marker { color: var(--color-ink-3); }
+
+.x-markdown-wrapper code {
+  background: var(--color-paper-2);
+  padding: 0.12rem 0.38rem;
+  border-radius: 2px;
+  font-size: 0.85em;
+  font-family: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+  color: var(--color-ink);
+}
+
+.x-markdown-wrapper pre {
+  background: var(--color-ink);
+  color: oklch(0.88 0.006 85);
+  padding: 1rem 1.1rem;
+  border-radius: 2px;
+  overflow-x: auto;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  margin: 0;
+}
+.x-markdown-wrapper pre code {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  font-size: inherit;
+}
+
+.x-markdown-wrapper a {
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+  transition: color 0.2s ease;
+}
+.x-markdown-wrapper a:hover { color: var(--color-accent-2); }
+
+.x-markdown-wrapper blockquote {
+  border-left: 2px solid var(--color-accent);
+  padding-left: 1rem;
+  color: var(--color-ink-2);
+  margin: 0;
+  font-style: italic;
+}
+
+.x-markdown-wrapper table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.88em;
+}
+.x-markdown-wrapper th,
+.x-markdown-wrapper td {
+  border-bottom: 1px solid var(--color-rule);
+  padding: 0.5rem 0.7rem;
+  text-align: left;
+  vertical-align: top;
+}
+.x-markdown-wrapper th {
+  border-bottom: 1px solid var(--color-ink);
+  font-weight: 600;
+  font-size: 0.78em;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-ink-2);
+}
+
+.x-markdown-wrapper hr {
+  border: none;
+  border-top: 1px solid var(--color-rule);
+  margin: 1.3rem 0;
+}
+
+.x-markdown-wrapper strong { font-weight: 600; }
+
+.x-markdown-wrapper img {
+  max-width: 100%;
+  border-radius: 2px;
+}

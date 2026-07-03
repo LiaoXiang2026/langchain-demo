@@ -93,7 +93,7 @@ docker compose down                      # 停止
 ### 部署（Docker）
 
 - `Dockerfile`: 基于 `python:3.10-slim`（Debian Bookworm），用官方 apt 源（VPS 在国外），装 `build-essential` + lxml 头文件（编译 C 扩展），用 `uv sync --frozen --no-dev` 装依赖，`uv run uvicorn server:app --workers 1 --proxy-headers` 启动。
-- `docker-compose.yml`: 单 `backend` 服务，`uploads` volume 持久化 `data/uploads`，`env_file: .env`，healthcheck 打 `/api/health`，内存上限 600M（适配 946M VPS）。
+- `docker-compose.yml`: 单 `backend` 服务，`uploads` volume 持久化 `data/uploads`，`env_file: .env`，healthcheck 打 `/api/health`
 - 本地模型加载后后端常驻内存，单 worker 配置保证线程安全；多 worker 场景需注意嵌入模型的多进程加载开销。
 
 ### 测试（`tests/`）
