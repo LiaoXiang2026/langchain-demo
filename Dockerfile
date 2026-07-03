@@ -6,7 +6,7 @@ WORKDIR /app/frontend
 RUN corepack enable
 # 先复制依赖文件，利用 Docker layer cache
 COPY frontend/package.json frontend/pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile
+RUN pnpm install
 # 复制源码并构建
 COPY frontend/ .
 RUN pnpm build
