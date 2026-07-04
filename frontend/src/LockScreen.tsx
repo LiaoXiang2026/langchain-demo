@@ -1,4 +1,4 @@
-import { useState, FormEvent } from 'react'
+import { useState } from 'react'
 
 interface LockScreenProps {
   onUnlock: () => void
@@ -16,7 +16,7 @@ function LockScreen({ onUnlock }: LockScreenProps) {
     return null
   }
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = (e: React.SyntheticEvent) => {
     e.preventDefault()
     if (password === correctPassword) {
       sessionStorage.setItem('corvus_unlocked', '1')
