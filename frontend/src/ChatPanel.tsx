@@ -122,6 +122,17 @@ function ChatPanel() {
 
   const { messages, status, error, sendMessage } = useChat({ transport })
 
+  // 调试：监听错误和状态变化
+  useEffect(() => {
+    console.log('Chat status:', status)
+  }, [status])
+
+  useEffect(() => {
+    if (error) {
+      console.error('Chat error:', error)
+    }
+  }, [error])
+
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
@@ -132,9 +143,12 @@ function ChatPanel() {
     const text = input.trim()
     if (!text || loading) return
     setInput('')
+    console.log('发送消息:', text)
     try {
       await sendMessage({ text })
-    } catch {
+      console.log('消息发送完成')
+    } catch (err) {
+      console.error('发送消息失败:', err)
       setInput(text)
     }
   }
