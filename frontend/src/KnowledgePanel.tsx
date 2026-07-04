@@ -78,7 +78,7 @@ function KnowledgePanel() {
       form.append('file', file)
 
       try {
-        await new Promise<void>((resolve, reject) => {
+        await new Promise<void>((resolve) => {
           const xhr = new XMLHttpRequest()
           xhr.open('POST', `${API_BASE_URL}/api/knowledge/upload`)
 
