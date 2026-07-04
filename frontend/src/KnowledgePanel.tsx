@@ -41,6 +41,7 @@ function SectionHead({
 function KnowledgePanel() {
   const [docs, setDocs] = useState<DocInfo[]>([])
   const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
   const [uploadMsg, setUploadMsg] = useState('')
   const [uploadError, setUploadError] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
@@ -66,27 +67,56 @@ function KnowledgePanel() {
   const handleUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return
     setUploading(true)
+    setUploadProgress(0)
     setUploadMsg('')
     setUploadError('')
 
-    for (const file of Array.from(files)) {
+    const fileArray = Array.from(files)
+    for (let i = 0; i < fileArray.length; i++) {
+      const file = fileArray[i]
       const form = new FormData()
       form.append('file', file)
+
       try {
-        const res = await fetch(`${API_BASE_URL}/api/knowledge/upload`, { method: 'POST', body: form })
-        if (!res.ok) {
-          const err = await res.json()
-          setUploadError(`${file.name}: ${err.detail}`)
-          continue
-        }
-        const result = await res.json()
-        setUploadMsg(`${result.filename} 已入库 · ${result.chunk_count} 片段`)
+        await new Promise<void>((resolve, reject) => {
+          const xhr = new XMLHttpRequest()
+          xhr.open('POST', `${API_BASE_URL}/api/knowledge/upload`)
+
+          xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable) {
+              // 单文件进度 + 多文件整体进度
+              const fileProgress = e.loaded / e.total
+              const totalProgress = (i + fileProgress) / fileArray.length
+              setUploadProgress(Math.round(totalProgress * 100))
+            }
+          }
+
+          xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+              const result = JSON.parse(xhr.responseText)
+              setUploadMsg(`${result.filename} 已入库 · ${result.chunk_count} 片段`)
+              resolve()
+            } else {
+              const err = JSON.parse(xhr.responseText)
+              setUploadError(`${file.name}: ${err.detail}`)
+              resolve() // 继续下一个文件
+            }
+          }
+
+          xhr.onerror = () => {
+            setUploadError(`${file.name}: 网络连接失败`)
+            resolve()
+          }
+
+          xhr.send(form)
+        })
       } catch {
-        setUploadError(`${file.name}: 网络连接失败`)
+        setUploadError(`${file.name}: 上传失败`)
       }
     }
 
     setUploading(false)
+    setUploadProgress(0)
     fetchDocs()
   }
 
@@ -150,8 +180,16 @@ function KnowledgePanel() {
             />
             <div className="px-8 py-12 text-center">
               <p className="font-serif text-2xl text-ink mb-2">
-                {uploading ? '入库中…' : '拖入文档，或点击选择'}
+                {uploading ? `入库中… ${uploadProgress}%` : '拖入文档，或点击选择'}
               </p>
+              {uploading && (
+                <div className="w-full h-1 bg-rule mt-4 mb-2">
+                  <div
+                    className="h-full bg-accent transition-all duration-300 ease-out"
+                    style={{ width: `${uploadProgress}%` }}
+                  />
+                </div>
+              )}
               <p className="smcp text-ink-3">
                 Markdown · PDF · HTML
               </p>
