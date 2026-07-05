@@ -134,6 +134,7 @@ function ChatPanel() {
   }, [error])
 
   useEffect(() => {
+    console.log('Messages updated:', JSON.stringify(messages, null, 2))
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
